@@ -14,6 +14,7 @@ import (
 
 	"github.com/paragishere/secrust/internal/config"
 	"github.com/paragishere/secrust/internal/database"
+	"github.com/paragishere/secrust/internal/setup"
 )
 
 func main() {
@@ -54,6 +55,15 @@ func run(logger *slog.Logger) error {
 
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
+
+	router.LoadHTMLGlob("templates/**/*.html")
+
+	setupService := setup.NewService(db)
+	setupHandler := setup.NewHandler(
+		setupService,
+		cfg.Environment == "production",
+	)
+	setupHandler.RegisterRoutes(router)
 
 	router.GET("/health", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)

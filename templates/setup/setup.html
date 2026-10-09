@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Initial Setup | Secrust</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background: #f3f6fb;
+            color: #1f2937;
+            font-family: system-ui, sans-serif;
+        }
+        main {
+            width: 100%;
+            max-width: 460px;
+            padding: 32px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            box-shadow: 0 12px 35px #17255412;
+        }
+        h1 { margin-top: 0; font-size: 26px; }
+        p { color: #64748b; line-height: 1.6; }
+        label { display: block; margin-top: 16px; font-weight: 600; }
+        input {
+            width: 100%;
+            margin-top: 7px;
+            padding: 11px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font: inherit;
+        }
+        input:focus {
+            outline: 2px solid #93c5fd;
+            border-color: #2563eb;
+        }
+        button {
+            width: 100%;
+            margin-top: 24px;
+            padding: 12px;
+            border: 0;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .error { color: #b91c1c; }
+        .success { color: #047857; }
+        .notice {
+            margin-top: 20px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Set up Secrust</h1>
+
+    {{if .Complete}}
+        <h2 class="success">Setup completed</h2>
+        <p>Your organization and administrator account have been created.</p>
+        <div class="notice">
+            Initial setup is now locked. Login functionality will be enabled
+            in the next implementation step.
+        </div>
+    {{else}}
+        <p>Create your organization and its first administrator.</p>
+
+        {{if .Error}}
+            <p class="error" role="alert">{{.Error}}</p>
+        {{end}}
+
+        <form action="/setup" method="POST">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+            <label for="organization_name">Organization name</label>
+            <input id="organization_name" name="organization_name"
+                   maxlength="120" required autocomplete="organization">
+
+            <label for="admin_name">Administrator name</label>
+            <input id="admin_name" name="admin_name"
+                   maxlength="120" required autocomplete="name">
+
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email"
+                   maxlength="254" required autocomplete="email">
+
+            <label for="password">Administrator password</label>
+            <input id="password" name="password" type="password"
+                   minlength="12" maxlength="72" required
+                   autocomplete="new-password">
+
+            <p>Use at least 12 characters for your password.</p>
+            <button type="submit">Create organization</button>
+        </form>
+    {{end}}
+</main>
+</body>
+</html>

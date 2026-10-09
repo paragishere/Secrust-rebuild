@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login | Secrust</title>
+</head>
+<body>
+    <main>
+        <h1>Sign in to Secrust</h1>
+
+        {{if .Error}}
+            <p role="alert">{{.Error}}</p>
+        {{end}}
+
+        <form action="/login" method="POST">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email"
+                   autocomplete="username" required>
+
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password"
+                   autocomplete="current-password" required>
+
+            <button type="submit">Sign in</button>
+        </form>
+    </main>
+</body>
+</html>

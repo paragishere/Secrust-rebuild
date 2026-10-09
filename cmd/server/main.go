@@ -12,9 +12,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/paragishere/secrust/internal/auth"
 	"github.com/paragishere/secrust/internal/config"
 	"github.com/paragishere/secrust/internal/database"
+	"github.com/paragishere/secrust/internal/organization"
 	"github.com/paragishere/secrust/internal/setup"
+	"github.com/paragishere/secrust/internal/website"
 )
 
 func main() {
@@ -48,15 +51,38 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	gin.SetMode(gin.ReleaseMode)
-	if cfg.Environment != "production" {
+	if cfg.Environment == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	} else {
 		gin.SetMode(gin.DebugMode)
 	}
 
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
-
 	router.LoadHTMLGlob("templates/**/*.html")
+
+	authRepo := auth.NewRepository(db)
+	authService := auth.NewService(authRepo, 8*time.Hour)
+	authHandler := auth.NewHandler(
+		authService,
+		cfg.Environment == "production",
+	)
+	authHandler.RegisterRoutes(router)
+
+	protected := router.Group("/")
+	protected.Use(authHandler.RequireAuth())
+	protected.GET("/dashboard", func(c *gin.Context) {
+		csrfToken, err := authHandler.NewDashboardCSRFToken(c)
+		if err != nil {
+			c.String(http.StatusInternalServerError, "Unable to prepare dashboard")
+			return
+		}
+
+		c.HTML(http.StatusOK, "dashboard.html", gin.H{
+			"Name":      c.GetString("userID"),
+			"CSRFToken": csrfToken,
+		})
+	})
 
 	setupService := setup.NewService(db)
 	setupHandler := setup.NewHandler(
@@ -64,6 +90,14 @@ func run(logger *slog.Logger) error {
 		cfg.Environment == "production",
 	)
 	setupHandler.RegisterRoutes(router)
+	websiteRepo := website.NewRepository(db)
+	websiteService := website.NewService(websiteRepo)
+	websiteHandler := website.NewHandler(websiteService)
+	websiteHandler.RegisterRoutes(router)
+	organizationRepo := organization.NewRepository(db)
+	organizationService := organization.NewService(organizationRepo)
+	organizationHandler := organization.NewHandler(organizationService)
+	organizationHandler.RegisterRoutes(router)
 
 	router.GET("/health", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)

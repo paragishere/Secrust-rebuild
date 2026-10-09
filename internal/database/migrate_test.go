@@ -47,7 +47,7 @@ func TestMigrateCreatesInitialSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if applied != 1 {
-		t.Fatalf("expected 1 recorded migration, got %d", applied)
+	if applied != 2 {
+		t.Fatalf("expected 2 recorded migrations, got %d", applied)
 	}
 }

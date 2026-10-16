@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/paragishere/secrust/internal/audit"
 	"github.com/paragishere/secrust/internal/auth"
 	"github.com/paragishere/secrust/internal/config"
 	"github.com/paragishere/secrust/internal/database"
@@ -90,14 +91,42 @@ func run(logger *slog.Logger) error {
 		cfg.Environment == "production",
 	)
 	setupHandler.RegisterRoutes(router)
+
 	websiteRepo := website.NewRepository(db)
 	websiteService := website.NewService(websiteRepo)
 	websiteHandler := website.NewHandler(websiteService)
 	websiteHandler.RegisterRoutes(router)
+
 	organizationRepo := organization.NewRepository(db)
 	organizationService := organization.NewService(organizationRepo)
 	organizationHandler := organization.NewHandler(organizationService)
 	organizationHandler.RegisterRoutes(router)
+
+	// Website assignment with atomic audit logging.
+	assignmentRepo := website.NewAssignmentRepository(db)
+	auditRepo := audit.NewRepository(db)
+	assignmentService := website.NewAssignmentServiceWithAudit(
+		db,
+		assignmentRepo,
+		auditRepo,
+	)
+	assignmentHandler := website.NewAssignmentHandler(assignmentService)
+
+	assignmentRoutes := router.Group("/api/websites")
+	assignmentRoutes.Use(authHandler.RequireAuth())
+	assignmentRoutes.Use(auth.RequireRoles(
+		auth.RoleSuperAdmin,
+		auth.RoleManager,
+	))
+
+	assignmentRoutes.PUT(
+		"/:websiteID/users/:userID",
+		assignmentHandler.Assign,
+	)
+	assignmentRoutes.DELETE(
+		"/:websiteID/users/:userID",
+		assignmentHandler.Unassign,
+	)
 
 	router.GET("/health", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)

@@ -227,6 +227,57 @@
             text-overflow: ellipsis;
         }
 
+        .filters {
+            display: grid;
+            grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(140px, 1fr));
+            gap: 14px;
+            margin: 20px 0;
+            align-items: end;
+        }
+
+        .filter-field label {
+            font-size: 13px;
+            color: #9ca3af;
+        }
+
+        .filter-field input,
+        .filter-field select {
+            width: 100%;
+            min-width: 0;
+            padding: 10px;
+            margin-bottom: 0;
+            background: #0b1120;
+            color: #e5e7eb;
+            border: 1px solid #374151;
+            border-radius: 6px;
+        }
+
+        .filter-actions {
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 800px) {
+            .filters {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .search-field,
+            .filter-actions {
+                grid-column: 1 / -1;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .filters {
+                grid-template-columns: 1fr;
+            }
+
+            .search-field,
+            .filter-actions {
+                grid-column: auto;
+            }
+        }
+
         @media (max-width: 640px) {
             body {
                 padding: 14px;
@@ -317,6 +368,51 @@
             <button id="refreshLogs" type="button">
                 Refresh Logs
             </button>
+        </div>
+
+        <div class="filters">
+            <div class="filter-field search-field">
+                <label for="logSearch">Search IP, path, event</label>
+                <input id="logSearch" type="search" maxlength="200"
+                       placeholder="192.0.2.10 or /login">
+            </div>
+            <div class="filter-field">
+                <label for="severityFilter">Severity</label>
+                <select id="severityFilter">
+                    <option value="">All severities</option>
+                    <option value="info">Info</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                </select>
+            </div>
+            <div class="filter-field">
+                <label for="statusFilter">HTTP status</label>
+                <select id="statusFilter">
+                    <option value="">All statuses</option>
+                    <option value="200">200</option>
+                    <option value="301">301</option>
+                    <option value="302">302</option>
+                    <option value="400">400</option>
+                    <option value="401">401</option>
+                    <option value="403">403</option>
+                    <option value="404">404</option>
+                    <option value="429">429</option>
+                    <option value="500">500</option>
+                    <option value="502">502</option>
+                    <option value="503">503</option>
+                </select>
+            </div>
+            <div class="filter-field">
+                <label for="eventTypeFilter">Event type</label>
+                <input id="eventTypeFilter" type="text" maxlength="100"
+                       placeholder="authentication_failure">
+            </div>
+            <div class="filter-actions">
+                <button id="applyFilters" type="button">Apply Filters</button>
+                <button id="clearFilters" type="button" class="secondary">Clear</button>
+            </div>
         </div>
 
         <p id="logsMessage" class="muted" role="status" aria-live="polite">
@@ -713,35 +809,42 @@ function renderLogs(logs) {
 }
 
 async function loadLogs() {
-    if (logsLoading) {
-        return;
-    }
+    if (logsLoading) return;
 
     logsLoading = true;
     document.getElementById("refreshLogs").disabled = true;
+    document.getElementById("applyFilters").disabled = true;
     previousPageButton.disabled = true;
     nextPageButton.disabled = true;
 
     logsMessage.textContent = "Loading logs...";
     logsMessage.className = "muted";
 
-    try {
-        const response = await fetch(
-            `/api/logs?limit=${PAGE_SIZE}&offset=${currentOffset}`,
-            {
-                method: "GET",
-                credentials: "same-origin",
-                headers: {
-                    "Accept": "application/json"
-                }
-            }
-        );
+    const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(currentOffset)
+    });
 
+    const search = document.getElementById("logSearch").value.trim();
+    const severity = document.getElementById("severityFilter").value;
+    const status = document.getElementById("statusFilter").value;
+    const eventType = document.getElementById("eventTypeFilter").value.trim();
+
+    if (search) params.set("search", search);
+    if (severity) params.set("severity", severity);
+    if (status) params.set("status", status);
+    if (eventType) params.set("event_type", eventType);
+
+    try {
+        const response = await fetch(`/api/logs?${params.toString()}`, {
+            method: "GET",
+            credentials: "same-origin",
+            headers: { "Accept": "application/json" }
+        });
         const data = await readJSON(response);
 
         if (response.redirected) {
-            logsMessage.textContent =
-                "Your session may have expired. Log in again.";
+            logsMessage.textContent = "Your session may have expired. Log in again.";
             logsMessage.className = "error";
             renderLogs([]);
             return;
@@ -749,34 +852,27 @@ async function loadLogs() {
 
         if (!response.ok) {
             logsMessage.textContent =
-                data.error ||
-                `Unable to load logs (HTTP ${response.status}).`;
+                data.error || `Unable to load logs (HTTP ${response.status}).`;
             logsMessage.className = "error";
             renderLogs([]);
             return;
         }
 
         if (!Array.isArray(data.logs)) {
-            logsMessage.textContent =
-                "Unexpected response from the logs API.";
+            logsMessage.textContent = "Unexpected response from logs API.";
             logsMessage.className = "error";
             renderLogs([]);
             return;
         }
 
         renderLogs(data.logs);
-
-        logsMessage.textContent =
-            data.logs.length === 0
-                ? "No logs available on this page."
-                : `Loaded ${data.logs.length} log(s).`;
-
-        logsMessage.className =
-            data.logs.length === 0 ? "muted" : "success";
+        logsMessage.textContent = data.logs.length
+            ? `Loaded ${data.logs.length} log(s).`
+            : "No logs match the selected filters.";
+        logsMessage.className = data.logs.length ? "success" : "muted";
 
         const pageNumber = Math.floor(currentOffset / PAGE_SIZE) + 1;
         paginationInfo.textContent = `Page ${pageNumber}`;
-
         previousPageButton.disabled = currentOffset === 0;
         nextPageButton.disabled = data.logs.length < PAGE_SIZE;
     } catch {
@@ -787,8 +883,39 @@ async function loadLogs() {
     } finally {
         logsLoading = false;
         document.getElementById("refreshLogs").disabled = false;
+        document.getElementById("applyFilters").disabled = false;
     }
 }
+
+document.getElementById("applyFilters").addEventListener("click", () => {
+    currentOffset = 0;
+    loadLogs();
+});
+
+document.getElementById("clearFilters").addEventListener("click", () => {
+    document.getElementById("logSearch").value = "";
+    document.getElementById("severityFilter").value = "";
+    document.getElementById("statusFilter").value = "";
+    document.getElementById("eventTypeFilter").value = "";
+    currentOffset = 0;
+    loadLogs();
+});
+
+document.getElementById("logSearch").addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        currentOffset = 0;
+        loadLogs();
+    }
+});
+
+document.getElementById("eventTypeFilter").addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        currentOffset = 0;
+        loadLogs();
+    }
+});
 
 document.getElementById("refreshWebsites").addEventListener(
     "click",

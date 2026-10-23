@@ -136,6 +136,7 @@ func (h *Handler) Ingest(c *gin.Context) {
 }
 
 // List returns logs belonging only to the authenticated user's organization.
+
 func (h *Handler) List(c *gin.Context) {
 	organizationID := c.GetString("organizationID")
 	if organizationID == "" {
@@ -170,11 +171,56 @@ func (h *Handler) List(c *gin.Context) {
 		offset = parsed
 	}
 
+	search := strings.TrimSpace(c.Query("search"))
+	severity := strings.ToLower(strings.TrimSpace(c.Query("severity")))
+	eventType := strings.TrimSpace(c.Query("event_type"))
+
+	if len(search) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "search must be at most 200 characters",
+		})
+		return
+	}
+
+	if len(eventType) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "event_type must be at most 100 characters",
+		})
+		return
+	}
+
+	if severity != "" {
+		switch severity {
+		case "info", "low", "medium", "high", "critical":
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "invalid severity",
+			})
+			return
+		}
+	}
+
+	status := 0
+	if value := c.Query("status"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 100 || parsed > 599 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "status must be between 100 and 599",
+			})
+			return
+		}
+		status = parsed
+	}
+
 	logs, err := h.repo.ListLogs(
 		c.Request.Context(),
 		organizationID,
 		limit,
 		offset,
+		search,
+		severity,
+		eventType,
+		status,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -184,8 +230,12 @@ func (h *Handler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"logs":   logs,
-		"limit":  limit,
-		"offset": offset,
+		"logs":       logs,
+		"limit":      limit,
+		"offset":     offset,
+		"search":     search,
+		"severity":   severity,
+		"event_type": eventType,
+		"status":     status,
 	})
 }

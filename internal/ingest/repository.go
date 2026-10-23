@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 type Repository struct {
@@ -77,6 +78,8 @@ func (r *Repository) ListLogs(
 	ctx context.Context,
 	organizationID string,
 	limit, offset int,
+	search, severity, eventType string,
+	status int,
 ) ([]Log, error) {
 	if organizationID == "" {
 		return nil, fmt.Errorf("organization ID is required")
@@ -89,7 +92,7 @@ func (r *Repository) ListLogs(
 		offset = 0
 	}
 
-	rows, err := r.db.QueryContext(ctx, `
+	query := `
 		SELECT
 			l.id,
 			l.website_id,
@@ -104,9 +107,48 @@ func (r *Repository) ListLogs(
 		FROM logs l
 		JOIN websites w ON w.id = l.website_id
 		WHERE w.organization_id = ?
-		ORDER BY l.created_at DESC, l.id DESC
-		LIMIT ? OFFSET ?
-	`, organizationID, limit, offset)
+	`
+
+	args := []any{organizationID}
+
+	if search != "" {
+		query += `
+			AND (
+				l.ip LIKE ? ESCAPE '\'
+				OR l.path LIKE ? ESCAPE '\'
+				OR l.event_type LIKE ? ESCAPE '\'
+			)
+		`
+
+		escaped := strings.NewReplacer(
+			`\`, `\\`,
+			`%`, `\%`,
+			`_`, `\_`,
+		).Replace(search)
+
+		pattern := "%" + escaped + "%"
+		args = append(args, pattern, pattern, pattern)
+	}
+
+	if severity != "" {
+		query += ` AND l.severity = ?`
+		args = append(args, severity)
+	}
+
+	if eventType != "" {
+		query += ` AND l.event_type = ?`
+		args = append(args, eventType)
+	}
+
+	if status != 0 {
+		query += ` AND l.status = ?`
+		args = append(args, status)
+	}
+
+	query += ` ORDER BY l.created_at DESC, l.id DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list organization logs: %w", err)
 	}
@@ -116,6 +158,7 @@ func (r *Repository) ListLogs(
 
 	for rows.Next() {
 		var log Log
+
 		if err := rows.Scan(
 			&log.ID,
 			&log.WebsiteID,

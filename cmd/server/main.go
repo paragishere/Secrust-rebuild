@@ -96,11 +96,10 @@ func run(logger *slog.Logger) error {
 	websiteService := website.NewService(websiteRepo)
 	websiteHandler := website.NewHandler(websiteService)
 	websiteHandler.RegisterRoutes(router)
-
 	organizationRepo := organization.NewRepository(db)
 	organizationService := organization.NewService(organizationRepo)
 	organizationHandler := organization.NewHandler(organizationService)
-	organizationHandler.RegisterRoutes(router)
+	organizationHandler.RegisterRoutes(router, authHandler)
 
 	// Website assignment with atomic audit logging.
 	assignmentRepo := website.NewAssignmentRepository(db)

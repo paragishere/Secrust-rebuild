@@ -16,9 +16,17 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-func (h *Handler) RegisterRoutes(router *gin.Engine) {
+func (h *Handler) RegisterRoutes(
+	router *gin.Engine,
+	authHandler *auth.Handler,
+) {
 	group := router.Group("/api/organization")
-	group.Use(auth.RequireRoles(auth.RoleSuperAdmin, auth.RoleManager))
+	group.Use(authHandler.RequireAuth())
+	group.Use(auth.RequireRoles(
+		auth.RoleSuperAdmin,
+		auth.RoleManager,
+	))
+
 	group.GET("/members", h.ListMembers)
 }
 

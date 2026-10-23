@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/paragishere/secrust/internal/alerts"
 	"github.com/paragishere/secrust/internal/audit"
 	"github.com/paragishere/secrust/internal/auth"
 	"github.com/paragishere/secrust/internal/config"
@@ -50,6 +51,18 @@ func run(logger *slog.Logger) error {
 	defer cancelStartup()
 
 	if err := database.Migrate(startupCtx, db); err != nil {
+		return err
+	}
+
+	// Initialize the alert detection engine.
+	alertRepo := alerts.NewRepository(db)
+
+	detector, err := alerts.NewDetector(alertRepo, alerts.DetectorConfig{
+		Window:       cfg.DetectionWindow,
+		MinimumCount: cfg.DetectionMinErrors,
+		SuppressFor:  cfg.DetectionSuppressFor,
+	})
+	if err != nil {
 		return err
 	}
 
@@ -109,6 +122,48 @@ func run(logger *slog.Logger) error {
 	ingestRoutes := router.Group("/api")
 	ingestRoutes.Use(ingest.APIKeyAuth(ingestRepo))
 	ingestRoutes.POST("/logs", ingestHandler.Ingest)
+
+	// Alert API: organization-scoped access with RBAC.
+	// alertRepo := alerts.NewRepository(db)
+	alertHandler := alerts.NewHandler(alertRepo)
+
+	alertRoutes := router.Group("/api/alerts")
+	alertRoutes.Use(authHandler.RequireAuth())
+
+	// All authenticated roles can view alerts in their own organization.
+	alertRoutes.GET(
+		"",
+		auth.RequireRoles(
+			auth.RoleSuperAdmin,
+			auth.RoleManager,
+			auth.RoleAnalyst,
+			auth.RoleViewer,
+		),
+		alertHandler.List,
+	)
+
+	// Only privileged operational roles can change alert status.
+	alertRoutes.PATCH(
+		"/:alertID/acknowledge",
+		auth.RequireRoles(
+			auth.RoleSuperAdmin,
+			auth.RoleManager,
+			auth.RoleAnalyst,
+		),
+		authHandler.RequireCSRFHeader(),
+		alertHandler.Acknowledge,
+	)
+
+	alertRoutes.PATCH(
+		"/:alertID/resolve",
+		auth.RequireRoles(
+			auth.RoleSuperAdmin,
+			auth.RoleManager,
+			auth.RoleAnalyst,
+		),
+		authHandler.RequireCSRFHeader(),
+		alertHandler.Resolve,
+	)
 
 	// Log Explorer API: authenticated with a user session and RBAC.
 	router.GET(
@@ -180,6 +235,21 @@ func run(logger *slog.Logger) error {
 		IdleTimeout:       60 * time.Second,
 	}
 
+	// Start the detector and retain its completion signal for shutdown.
+	schedulerCtx, cancelScheduler := context.WithCancel(context.Background())
+	schedulerDone := make(chan struct{})
+
+	scheduler := alerts.NewScheduler(
+		detector,
+		cfg.DetectionInterval,
+		logger,
+	)
+
+	go func() {
+		defer close(schedulerDone)
+		scheduler.Run(schedulerCtx)
+	}()
+
 	serverErrors := make(chan error, 1)
 
 	go func() {
@@ -196,6 +266,9 @@ func run(logger *slog.Logger) error {
 
 	select {
 	case err := <-serverErrors:
+		cancelScheduler()
+		<-schedulerDone
+
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
@@ -205,6 +278,9 @@ func run(logger *slog.Logger) error {
 		logger.Info("shutdown signal received")
 	}
 
+	// Stop background detection before the database is closed.
+	cancelScheduler()
+
 	shutdownCtx, cancelShutdown := context.WithTimeout(
 		context.Background(),
 		10*time.Second,
@@ -213,13 +289,17 @@ func run(logger *slog.Logger) error {
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		_ = server.Close()
+		<-schedulerDone
 		return err
 	}
 
 	if err := <-serverErrors; err != nil &&
 		!errors.Is(err, http.ErrServerClosed) {
+		<-schedulerDone
 		return err
 	}
+
+	<-schedulerDone
 
 	logger.Info("server stopped gracefully")
 	return nil

@@ -5,7 +5,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Dashboard | Secrust</title>
+
     <style>
+        :root {
+            color-scheme: dark;
+            --bg: #0b1120;
+            --panel: #111827;
+            --border: #273449;
+            --text: #e5e7eb;
+            --muted: #9ca3af;
+            --blue: #60a5fa;
+        }
+
         * {
             box-sizing: border-box;
         }
@@ -13,26 +24,34 @@
         body {
             margin: 0;
             padding: 32px;
-            background: #0b1120;
-            color: #e5e7eb;
+            background: var(--bg);
+            color: var(--text);
             font-family: Arial, sans-serif;
         }
 
         .container {
-            max-width: 900px;
+            max-width: 1250px;
             margin: auto;
         }
 
         .card {
-            background: #111827;
-            border: 1px solid #273449;
+            background: var(--panel);
+            border: 1px solid var(--border);
             border-radius: 12px;
             padding: 24px;
             margin: 20px 0;
         }
 
         h1, h2 {
-            color: #60a5fa;
+            color: var(--blue);
+        }
+
+        h1 {
+            margin-bottom: 8px;
+        }
+
+        h2 {
+            margin-top: 0;
         }
 
         label {
@@ -43,7 +62,7 @@
         input {
             width: 100%;
             padding: 12px;
-            background: #0b1120;
+            background: var(--bg);
             color: white;
             border: 1px solid #374151;
             border-radius: 6px;
@@ -60,18 +79,21 @@
             margin: 4px 4px 4px 0;
         }
 
+        button:hover:not(:disabled) {
+            background: #1d4ed8;
+        }
+
         button:disabled {
-            opacity: 0.6;
+            opacity: 0.5;
             cursor: not-allowed;
         }
 
-        .muted {
-            color: #9ca3af;
+        .secondary {
+            background: #374151;
         }
 
-        #result, #websiteList {
-            margin-top: 16px;
-            overflow-wrap: anywhere;
+        .muted {
+            color: var(--muted);
         }
 
         .error {
@@ -81,20 +103,164 @@
         .success {
             color: #86efac;
         }
+
+        #result, #websiteList {
+            margin-top: 16px;
+            overflow-wrap: anywhere;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .toolbar p {
+            margin: 0;
+        }
+
+        .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            white-space: nowrap;
+            font-size: 13px;
+        }
+
+        th, td {
+            padding: 13px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            color: #93c5fd;
+            background: #172033;
+            font-weight: 600;
+        }
+
+        tbody tr:hover {
+            background: #172033;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .severity-info {
+            color: #bfdbfe;
+            background: #1e3a5f;
+        }
+
+        .severity-low {
+            color: #bbf7d0;
+            background: #14532d;
+        }
+
+        .severity-medium {
+            color: #fde68a;
+            background: #713f12;
+        }
+
+        .severity-high {
+            color: #fed7aa;
+            background: #7c2d12;
+        }
+
+        .severity-critical {
+            color: #fecaca;
+            background: #7f1d1d;
+        }
+
+        .status-success {
+            color: #86efac;
+        }
+
+        .status-warning {
+            color: #fde68a;
+        }
+
+        .status-error {
+            color: #fca5a5;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+
+        .pagination p {
+            margin: 0;
+        }
+
+        .empty-state {
+            padding: 28px 12px;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .path-cell {
+            max-width: 280px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 14px;
+            }
+
+            .card {
+                padding: 16px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+        }
     </style>
 </head>
+
 <body>
 <div class="container">
     <h1>Secrust Dashboard</h1>
     <p class="muted">Authenticated user: {{.Name}}</p>
 
     <form action="/logout" method="POST">
-        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <button type="submit">Logout</button>
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{.CSRFToken}}"
+        >
+        <button type="submit" class="secondary">Logout</button>
     </form>
 
+    <!-- Website registration -->
     <section class="card">
         <h2>Register Website</h2>
+
         <p class="muted">
             Register a domain to receive its ingestion API key.
             The raw API key is shown only once.
@@ -111,16 +277,100 @@
                 autocomplete="url"
                 required
             >
-            <button id="createButton" type="submit">Create Website</button>
+
+            <button id="createButton" type="submit">
+                Create Website
+            </button>
         </form>
 
         <div id="result" role="status" aria-live="polite"></div>
     </section>
 
+    <!-- Registered websites -->
     <section class="card">
-        <h2>Registered Websites</h2>
-        <button id="refreshWebsites" type="button">Refresh List</button>
-        <div id="websiteList" class="muted" aria-live="polite"></div>
+        <div class="toolbar">
+            <div>
+                <h2>Registered Websites</h2>
+                <p class="muted">Your organization's registered domains.</p>
+            </div>
+
+            <button id="refreshWebsites" type="button" class="secondary">
+                Refresh Websites
+            </button>
+        </div>
+
+        <div id="websiteList" class="muted" aria-live="polite">
+            Loading websites...
+        </div>
+    </section>
+
+    <!-- Logs Explorer -->
+    <section class="card">
+        <div class="toolbar">
+            <div>
+                <h2>Logs Explorer</h2>
+                <p class="muted">
+                    Security and HTTP events for your organization.
+                </p>
+            </div>
+
+            <button id="refreshLogs" type="button">
+                Refresh Logs
+            </button>
+        </div>
+
+        <p id="logsMessage" class="muted" role="status" aria-live="polite">
+            Loading logs...
+        </p>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Timestamp (UTC)</th>
+                    <th>Severity</th>
+                    <th>Event</th>
+                    <th>Method</th>
+                    <th>Path</th>
+                    <th>HTTP Status</th>
+                    <th>IP Address</th>
+                </tr>
+                </thead>
+
+                <tbody id="logsTableBody">
+                <tr>
+                    <td colspan="7" class="empty-state">
+                        Loading logs...
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <p id="paginationInfo" class="muted">
+                Page 1
+            </p>
+
+            <div>
+                <button
+                    id="previousPage"
+                    type="button"
+                    class="secondary"
+                    disabled
+                >
+                    Previous
+                </button>
+
+                <button
+                    id="nextPage"
+                    type="button"
+                    disabled
+                >
+                    Next
+                </button>
+            </div>
+        </div>
     </section>
 </div>
 
@@ -130,6 +380,16 @@
 const result = document.getElementById("result");
 const websiteList = document.getElementById("websiteList");
 const createButton = document.getElementById("createButton");
+
+const logsTableBody = document.getElementById("logsTableBody");
+const logsMessage = document.getElementById("logsMessage");
+const paginationInfo = document.getElementById("paginationInfo");
+const previousPageButton = document.getElementById("previousPage");
+const nextPageButton = document.getElementById("nextPage");
+
+const PAGE_SIZE = 20;
+let currentOffset = 0;
+let logsLoading = false;
 
 function getCookie(name) {
     const prefix = name + "=";
@@ -149,6 +409,12 @@ function getCookie(name) {
 }
 
 async function readJSON(response) {
+    const contentType = response.headers.get("content-type") || "";
+
+    if (!contentType.includes("application/json")) {
+        return {};
+    }
+
     try {
         return await response.json();
     } catch {
@@ -219,7 +485,7 @@ function showAPIKey(domain, apiKey) {
 
 document.getElementById("websiteForm").addEventListener(
     "submit",
-    async (event) => {
+    async event => {
         event.preventDefault();
 
         const domain = document.getElementById("domain").value.trim();
@@ -249,9 +515,15 @@ document.getElementById("websiteForm").addEventListener(
 
             const data = await readJSON(response);
 
+            if (response.redirected) {
+                showMessage("Your session may have expired. Log in again.", true);
+                return;
+            }
+
             if (!response.ok) {
                 showMessage(
-                    data.error || `Website creation failed (HTTP ${response.status}).`,
+                    data.error ||
+                    `Website creation failed (HTTP ${response.status}).`,
                     true
                 );
                 return;
@@ -271,7 +543,7 @@ document.getElementById("websiteForm").addEventListener(
             await loadWebsites();
         } catch {
             showMessage(
-                "Request failed. Check that the server is running, then try again.",
+                "Request failed. Check that the server is running.",
                 true
             );
         } finally {
@@ -291,13 +563,22 @@ async function loadWebsites() {
 
         const data = await readJSON(response);
 
-        if (!response.ok) {
-            websiteList.textContent =
-                data.error || `Unable to load websites (HTTP ${response.status}).`;
+        if (response.redirected) {
+            websiteList.textContent = "Your session may have expired. Log in again.";
             return;
         }
 
-        const websites = Array.isArray(data.websites) ? data.websites : [];
+        if (!response.ok) {
+            websiteList.textContent =
+                data.error ||
+                `Unable to load websites (HTTP ${response.status}).`;
+            return;
+        }
+
+        const websites = Array.isArray(data.websites)
+            ? data.websites
+            : [];
+
         websiteList.replaceChildren();
 
         if (websites.length === 0) {
@@ -323,12 +604,216 @@ async function loadWebsites() {
     }
 }
 
+function formatTimestamp(value) {
+    if (!value) {
+        return "—";
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return String(value);
+    }
+
+    return date.toISOString().replace("T", " ").replace("Z", " UTC");
+}
+
+function createCell(value, className = "") {
+    const cell = document.createElement("td");
+    cell.textContent =
+        value === null || value === undefined || value === ""
+            ? "—"
+            : String(value);
+
+    if (className) {
+        cell.className = className;
+    }
+
+    return cell;
+}
+
+function severityClass(value) {
+    const severity = String(value || "").toLowerCase();
+
+    switch (severity) {
+        case "info":
+        case "low":
+        case "medium":
+        case "high":
+        case "critical":
+            return "severity-" + severity;
+        default:
+            return "";
+    }
+}
+
+function statusClass(value) {
+    const status = Number(value);
+
+    if (status >= 200 && status < 300) {
+        return "status-success";
+    }
+
+    if (status >= 300 && status < 400) {
+        return "status-warning";
+    }
+
+    if (status >= 400 && status <= 599) {
+        return "status-error";
+    }
+
+    return "";
+}
+
+function renderLogs(logs) {
+    logsTableBody.replaceChildren();
+
+    if (logs.length === 0) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+
+        cell.colSpan = 7;
+        cell.className = "empty-state";
+        cell.textContent = "No logs found for this page.";
+
+        row.appendChild(cell);
+        logsTableBody.appendChild(row);
+        return;
+    }
+
+    for (const log of logs) {
+        const row = document.createElement("tr");
+
+        row.appendChild(createCell(formatTimestamp(log.CreatedAt)));
+
+        const severityCell = document.createElement("td");
+        const severityBadge = document.createElement("span");
+
+        severityBadge.className =
+            "badge " + severityClass(log.Severity);
+
+        severityBadge.textContent = log.Severity || "unknown";
+        severityCell.appendChild(severityBadge);
+        row.appendChild(severityCell);
+
+        row.appendChild(createCell(log.EventType));
+        row.appendChild(createCell(log.Method));
+        row.appendChild(createCell(log.Path, "path-cell"));
+
+        const statusCell = createCell(
+            log.Status,
+            statusClass(log.Status)
+        );
+        row.appendChild(statusCell);
+
+        row.appendChild(createCell(log.IP));
+
+        logsTableBody.appendChild(row);
+    }
+}
+
+async function loadLogs() {
+    if (logsLoading) {
+        return;
+    }
+
+    logsLoading = true;
+    document.getElementById("refreshLogs").disabled = true;
+    previousPageButton.disabled = true;
+    nextPageButton.disabled = true;
+
+    logsMessage.textContent = "Loading logs...";
+    logsMessage.className = "muted";
+
+    try {
+        const response = await fetch(
+            `/api/logs?limit=${PAGE_SIZE}&offset=${currentOffset}`,
+            {
+                method: "GET",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json"
+                }
+            }
+        );
+
+        const data = await readJSON(response);
+
+        if (response.redirected) {
+            logsMessage.textContent =
+                "Your session may have expired. Log in again.";
+            logsMessage.className = "error";
+            renderLogs([]);
+            return;
+        }
+
+        if (!response.ok) {
+            logsMessage.textContent =
+                data.error ||
+                `Unable to load logs (HTTP ${response.status}).`;
+            logsMessage.className = "error";
+            renderLogs([]);
+            return;
+        }
+
+        if (!Array.isArray(data.logs)) {
+            logsMessage.textContent =
+                "Unexpected response from the logs API.";
+            logsMessage.className = "error";
+            renderLogs([]);
+            return;
+        }
+
+        renderLogs(data.logs);
+
+        logsMessage.textContent =
+            data.logs.length === 0
+                ? "No logs available on this page."
+                : `Loaded ${data.logs.length} log(s).`;
+
+        logsMessage.className =
+            data.logs.length === 0 ? "muted" : "success";
+
+        const pageNumber = Math.floor(currentOffset / PAGE_SIZE) + 1;
+        paginationInfo.textContent = `Page ${pageNumber}`;
+
+        previousPageButton.disabled = currentOffset === 0;
+        nextPageButton.disabled = data.logs.length < PAGE_SIZE;
+    } catch {
+        logsMessage.textContent =
+            "Unable to connect to the logs API. Check the server.";
+        logsMessage.className = "error";
+        renderLogs([]);
+    } finally {
+        logsLoading = false;
+        document.getElementById("refreshLogs").disabled = false;
+    }
+}
+
 document.getElementById("refreshWebsites").addEventListener(
     "click",
     loadWebsites
 );
 
+document.getElementById("refreshLogs").addEventListener(
+    "click",
+    loadLogs
+);
+
+previousPageButton.addEventListener("click", () => {
+    if (currentOffset >= PAGE_SIZE) {
+        currentOffset -= PAGE_SIZE;
+        loadLogs();
+    }
+});
+
+nextPageButton.addEventListener("click", () => {
+    currentOffset += PAGE_SIZE;
+    loadLogs();
+});
+
 loadWebsites();
+loadLogs();
 </script>
 </body>
 </html>

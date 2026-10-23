@@ -16,6 +16,7 @@ import (
 	"github.com/paragishere/secrust/internal/auth"
 	"github.com/paragishere/secrust/internal/config"
 	"github.com/paragishere/secrust/internal/database"
+	"github.com/paragishere/secrust/internal/ingest"
 	"github.com/paragishere/secrust/internal/organization"
 	"github.com/paragishere/secrust/internal/setup"
 	"github.com/paragishere/secrust/internal/website"
@@ -72,10 +73,14 @@ func run(logger *slog.Logger) error {
 
 	protected := router.Group("/")
 	protected.Use(authHandler.RequireAuth())
+
 	protected.GET("/dashboard", func(c *gin.Context) {
 		csrfToken, err := authHandler.NewDashboardCSRFToken(c)
 		if err != nil {
-			c.String(http.StatusInternalServerError, "Unable to prepare dashboard")
+			c.String(
+				http.StatusInternalServerError,
+				"Unable to prepare dashboard",
+			)
 			return
 		}
 
@@ -95,7 +100,29 @@ func run(logger *slog.Logger) error {
 	websiteRepo := website.NewRepository(db)
 	websiteService := website.NewService(websiteRepo)
 	websiteHandler := website.NewHandler(websiteService)
-	websiteHandler.RegisterRoutes(router)
+	websiteHandler.RegisterRoutes(router, authHandler)
+
+	// Log ingestion: authenticated with a website API key.
+	ingestRepo := ingest.NewRepository(db)
+	ingestHandler := ingest.NewHandler(ingestRepo)
+
+	ingestRoutes := router.Group("/api")
+	ingestRoutes.Use(ingest.APIKeyAuth(ingestRepo))
+	ingestRoutes.POST("/logs", ingestHandler.Ingest)
+
+	// Log Explorer API: authenticated with a user session and RBAC.
+	router.GET(
+		"/api/logs",
+		authHandler.RequireAuth(),
+		auth.RequireRoles(
+			auth.RoleSuperAdmin,
+			auth.RoleManager,
+			auth.RoleAnalyst,
+			auth.RoleViewer,
+		),
+		ingestHandler.List,
+	)
+
 	organizationRepo := organization.NewRepository(db)
 	organizationService := organization.NewService(organizationRepo)
 	organizationHandler := organization.NewHandler(organizationService)
@@ -128,7 +155,10 @@ func run(logger *slog.Logger) error {
 	)
 
 	router.GET("/health", func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(
+			c.Request.Context(),
+			2*time.Second,
+		)
 		defer cancel()
 
 		if err := db.PingContext(ctx); err != nil {

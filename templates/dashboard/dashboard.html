@@ -1,11 +1,334 @@
+
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>Dashboard | Secrust</title></head>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard | Secrust</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 32px;
+            background: #0b1120;
+            color: #e5e7eb;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .card {
+            background: #111827;
+            border: 1px solid #273449;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 20px 0;
+        }
+
+        h1, h2 {
+            color: #60a5fa;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            background: #0b1120;
+            color: white;
+            border: 1px solid #374151;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        button {
+            padding: 10px 16px;
+            background: #2563eb;
+            color: white;
+            border: 0;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 4px 4px 4px 0;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .muted {
+            color: #9ca3af;
+        }
+
+        #result, #websiteList {
+            margin-top: 16px;
+            overflow-wrap: anywhere;
+        }
+
+        .error {
+            color: #fca5a5;
+        }
+
+        .success {
+            color: #86efac;
+        }
+    </style>
+</head>
 <body>
+<div class="container">
     <h1>Secrust Dashboard</h1>
-    <p>Authenticated user: {{.Name}}</p>
+    <p class="muted">Authenticated user: {{.Name}}</p>
+
     <form action="/logout" method="POST">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <button type="submit">Logout</button>
     </form>
+
+    <section class="card">
+        <h2>Register Website</h2>
+        <p class="muted">
+            Register a domain to receive its ingestion API key.
+            The raw API key is shown only once.
+        </p>
+
+        <form id="websiteForm">
+            <label for="domain">Website domain</label>
+            <input
+                id="domain"
+                name="domain"
+                type="text"
+                placeholder="example.com"
+                maxlength="253"
+                autocomplete="url"
+                required
+            >
+            <button id="createButton" type="submit">Create Website</button>
+        </form>
+
+        <div id="result" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card">
+        <h2>Registered Websites</h2>
+        <button id="refreshWebsites" type="button">Refresh List</button>
+        <div id="websiteList" class="muted" aria-live="polite"></div>
+    </section>
+</div>
+
+<script>
+"use strict";
+
+const result = document.getElementById("result");
+const websiteList = document.getElementById("websiteList");
+const createButton = document.getElementById("createButton");
+
+function getCookie(name) {
+    const prefix = name + "=";
+    const cookie = document.cookie
+        .split("; ")
+        .find(item => item.startsWith(prefix));
+
+    if (!cookie) {
+        return "";
+    }
+
+    try {
+        return decodeURIComponent(cookie.substring(prefix.length));
+    } catch {
+        return "";
+    }
+}
+
+async function readJSON(response) {
+    try {
+        return await response.json();
+    } catch {
+        return {};
+    }
+}
+
+function showMessage(message, isError = false) {
+    result.replaceChildren();
+
+    const paragraph = document.createElement("p");
+    paragraph.textContent = message;
+    paragraph.className = isError ? "error" : "success";
+
+    result.appendChild(paragraph);
+}
+
+function showAPIKey(domain, apiKey) {
+    result.replaceChildren();
+
+    const message = document.createElement("p");
+    message.textContent = "Website created: " + domain;
+    result.appendChild(message);
+
+    const warning = document.createElement("p");
+    warning.className = "muted";
+    warning.textContent =
+        "Copy this API key now and store it securely. It cannot be retrieved again.";
+    result.appendChild(warning);
+
+    const keyInput = document.createElement("input");
+    keyInput.type = "password";
+    keyInput.readOnly = true;
+    keyInput.autocomplete = "off";
+    keyInput.value = apiKey;
+    keyInput.setAttribute("aria-label", "Generated API key");
+    result.appendChild(keyInput);
+
+    const revealButton = document.createElement("button");
+    revealButton.type = "button";
+    revealButton.textContent = "Show key";
+
+    revealButton.addEventListener("click", () => {
+        const reveal = keyInput.type === "password";
+        keyInput.type = reveal ? "text" : "password";
+        revealButton.textContent = reveal ? "Hide key" : "Show key";
+    });
+
+    result.appendChild(revealButton);
+
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.textContent = "Copy API key";
+
+    copyButton.addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText(apiKey);
+            copyButton.textContent = "Copied";
+        } catch {
+            keyInput.focus();
+            keyInput.select();
+            copyButton.textContent = "Select key and copy";
+        }
+    });
+
+    result.appendChild(copyButton);
+}
+
+document.getElementById("websiteForm").addEventListener(
+    "submit",
+    async (event) => {
+        event.preventDefault();
+
+        const domain = document.getElementById("domain").value.trim();
+        const csrfToken = getCookie("secrust_csrf");
+
+        if (!csrfToken) {
+            showMessage(
+                "CSRF token is missing. Refresh the dashboard and try again.",
+                true
+            );
+            return;
+        }
+
+        createButton.disabled = true;
+        showMessage("Creating website...");
+
+        try {
+            const response = await fetch("/api/websites", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRF-Token": csrfToken
+                },
+                credentials: "same-origin",
+                body: JSON.stringify({ domain })
+            });
+
+            const data = await readJSON(response);
+
+            if (!response.ok) {
+                showMessage(
+                    data.error || `Website creation failed (HTTP ${response.status}).`,
+                    true
+                );
+                return;
+            }
+
+            if (!data.website || !data.api_key) {
+                showMessage(
+                    "Website response was incomplete. Check the server logs.",
+                    true
+                );
+                return;
+            }
+
+            showAPIKey(data.website.domain, data.api_key);
+            document.getElementById("domain").value = "";
+
+            await loadWebsites();
+        } catch {
+            showMessage(
+                "Request failed. Check that the server is running, then try again.",
+                true
+            );
+        } finally {
+            createButton.disabled = false;
+        }
+    }
+);
+
+async function loadWebsites() {
+    websiteList.textContent = "Loading websites...";
+
+    try {
+        const response = await fetch("/api/websites", {
+            method: "GET",
+            credentials: "same-origin"
+        });
+
+        const data = await readJSON(response);
+
+        if (!response.ok) {
+            websiteList.textContent =
+                data.error || `Unable to load websites (HTTP ${response.status}).`;
+            return;
+        }
+
+        const websites = Array.isArray(data.websites) ? data.websites : [];
+        websiteList.replaceChildren();
+
+        if (websites.length === 0) {
+            websiteList.textContent = "No websites registered yet.";
+            return;
+        }
+
+        const list = document.createElement("ul");
+
+        for (const website of websites) {
+            const item = document.createElement("li");
+            const domain = website.domain || "Unknown domain";
+            const status = website.status || "unknown";
+
+            item.textContent = `${domain} — ${status}`;
+            list.appendChild(item);
+        }
+
+        websiteList.appendChild(list);
+    } catch {
+        websiteList.textContent =
+            "Unable to load websites. Check the server connection.";
+    }
+}
+
+document.getElementById("refreshWebsites").addEventListener(
+    "click",
+    loadWebsites
+);
+
+loadWebsites();
+</script>
 </body>
 </html>

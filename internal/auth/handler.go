@@ -74,6 +74,23 @@ func (h *Handler) validCSRF(c *gin.Context) bool {
 	) == 1
 }
 
+func (h *Handler) validCSRFHeader(c *gin.Context) bool {
+	cookieToken, err := c.Cookie(CSRFCookieName)
+	if err != nil || len(cookieToken) != 64 {
+		return false
+	}
+
+	headerToken := c.GetHeader("X-CSRF-Token")
+	if len(headerToken) != 64 {
+		return false
+	}
+
+	return subtle.ConstantTimeCompare(
+		[]byte(cookieToken),
+		[]byte(headerToken),
+	) == 1
+}
+
 func (h *Handler) ShowLogin(c *gin.Context) {
 	token, err := h.newCSRFToken()
 	if err != nil {
@@ -175,7 +192,15 @@ func (h *Handler) Logout(c *gin.Context) {
 
 	c.Redirect(http.StatusSeeOther, "/login")
 }
+
 func (h *Handler) NewDashboardCSRFToken(c *gin.Context) (string, error) {
+	cookieToken, err := c.Cookie(CSRFCookieName)
+	if err == nil && len(cookieToken) == 64 {
+		if _, decodeErr := hex.DecodeString(cookieToken); decodeErr == nil {
+			return cookieToken, nil
+		}
+	}
+
 	token, err := h.newCSRFToken()
 	if err != nil {
 		return "", err
@@ -183,4 +208,17 @@ func (h *Handler) NewDashboardCSRFToken(c *gin.Context) (string, error) {
 
 	h.setCSRFCookie(c, token)
 	return token, nil
+}
+
+func (h *Handler) RequireCSRFHeader() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !h.validCSRFHeader(c) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "invalid or missing CSRF token",
+			})
+			return
+		}
+
+		c.Next()
+	}
 }

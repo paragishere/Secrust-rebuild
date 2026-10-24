@@ -124,7 +124,7 @@ func run(logger *slog.Logger) error {
 	ingestRoutes.POST("/logs", ingestHandler.Ingest)
 
 	// Alert API: organization-scoped access with RBAC.
-	// alertRepo := alerts.NewRepository(db)
+
 	alertHandler := alerts.NewHandler(alertRepo)
 
 	alertRoutes := router.Group("/api/alerts")

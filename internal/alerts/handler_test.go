@@ -166,3 +166,89 @@ func TestAlertHandlerListRequiresOrganization(t *testing.T) {
 			http.StatusUnauthorized, rec.Code)
 	}
 }
+
+func TestAlertHandlerResolveIsOrganizationScoped(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, repo := setupAlertHandlerTest(t)
+
+	orgBAlerts, err := repo.List(t.Context(), "org-b", "", 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(orgBAlerts) != 1 {
+		t.Fatalf("expected one org-b alert, got %d", len(orgBAlerts))
+	}
+
+	router := gin.New()
+	router.PATCH("/api/alerts/:alertID/resolve", func(c *gin.Context) {
+		c.Set(contextOrganizationID, "org-a")
+		c.Set(contextUserID, "user-a")
+		handler.Resolve(c)
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/alerts/"+orgBAlerts[0].ID+"/resolve",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d: %s",
+			http.StatusNotFound, rec.Code, rec.Body.String())
+	}
+
+	// The alert belonging to org-b must remain open.
+	updated, err := repo.List(t.Context(), "org-b", "", 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated) != 1 || updated[0].Status != "open" {
+		t.Fatalf("org-b alert should remain open, got %+v", updated)
+	}
+}
+
+func TestAlertHandlerResolveSucceeds(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, repo := setupAlertHandlerTest(t)
+
+	orgAAlerts, err := repo.List(t.Context(), "org-a", "", 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(orgAAlerts) != 1 {
+		t.Fatalf("expected one org-a alert, got %d", len(orgAAlerts))
+	}
+
+	router := gin.New()
+	router.PATCH("/api/alerts/:alertID/resolve", func(c *gin.Context) {
+		c.Set(contextOrganizationID, "org-a")
+		c.Set(contextUserID, "user-a")
+		handler.Resolve(c)
+	})
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/alerts/"+orgAAlerts[0].ID+"/resolve",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s",
+			http.StatusOK, rec.Code, rec.Body.String())
+	}
+
+	updated, err := repo.List(t.Context(), "org-a", "resolved", 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated) != 1 {
+		t.Fatalf("expected one resolved alert, got %d", len(updated))
+	}
+	if updated[0].ResolvedBy != "user-a" {
+		t.Fatalf("expected resolved_by user-a, got %q", updated[0].ResolvedBy)
+	}
+}

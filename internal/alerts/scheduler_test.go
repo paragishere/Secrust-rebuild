@@ -102,8 +102,8 @@ func TestSchedulerRunsAllDetectionRules(t *testing.T) {
 	if !foundRules[HTTP5xxSpikeRuleKey] {
 		t.Error("expected HTTP 5xx spike alert")
 	}
-	if len(alerts) != 4 {
-		t.Fatalf("expected 4 alerts from scheduler, got %d: %+v", len(alerts), alerts)
+	if len(alerts) != 5 {
+		t.Fatalf("expected 5 alerts from scheduler, got %d: %+v", len(alerts), alerts)
 	}
 	if !foundRules[BruteForceRuleKey] {
 		t.Error("expected brute-force alert")

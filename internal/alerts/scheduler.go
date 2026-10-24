@@ -128,4 +128,23 @@ func (s *Scheduler) runDetection(ctx context.Context) {
 		"suppressed", requestRateResult.AlertsSuppressed,
 	)
 
+	if ctx.Err() != nil {
+		return
+	}
+
+	advancedResult, err := s.detector.RunAdvancedDetection(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		s.logger.Error("advanced detection failed", "error", err)
+		return
+	}
+
+	s.logger.Info(
+		"advanced detection completed",
+		"candidates", advancedResult.CandidatesFound,
+		"created", advancedResult.AlertsCreated,
+		"suppressed", advancedResult.AlertsSuppressed,
+	)
 }

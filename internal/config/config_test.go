@@ -63,6 +63,9 @@ func TestLoadRejectsInvalidDetectionConfig(t *testing.T) {
 		{"invalid auth failure minimum", "DETECTION_MIN_AUTH_FAILURES", "abc"},
 		{"zero auth failure minimum", "DETECTION_MIN_AUTH_FAILURES", "0"},
 		{"negative auth failure minimum", "DETECTION_MIN_AUTH_FAILURES", "-1"},
+		{"invalid 404 minimum", "DETECTION_MIN_NOT_FOUND", "abc"},
+		{"zero 404 minimum", "DETECTION_MIN_NOT_FOUND", "0"},
+		{"negative 404 minimum", "DETECTION_MIN_NOT_FOUND", "-1"},
 		{"invalid suppression", "DETECTION_SUPPRESS_FOR", "abc"},
 		{"zero suppression", "DETECTION_SUPPRESS_FOR", "0s"},
 	}
@@ -86,6 +89,7 @@ func TestLoadAcceptsCustomDetectionConfig(t *testing.T) {
 	t.Setenv("DETECTION_MIN_ERRORS", "20")
 	t.Setenv("DETECTION_MIN_AUTH_FAILURES", "5")
 	t.Setenv("DETECTION_SUPPRESS_FOR", "45m")
+	t.Setenv("DETECTION_MIN_NOT_FOUND", "5")
 
 	cfg, err := Load()
 	if err != nil {

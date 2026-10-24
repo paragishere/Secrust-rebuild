@@ -81,6 +81,26 @@ func (s *Scheduler) runDetection(ctx context.Context) {
 		return
 	}
 
+	if ctx.Err() != nil {
+		return
+	}
+
+	notFoundResult, err := s.detector.RunNotFoundDetection(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		s.logger.Error("HTTP 404 detection failed", "error", err)
+		return
+	}
+
+	s.logger.Info(
+		"HTTP 404 detection completed",
+		"candidates", notFoundResult.CandidatesFound,
+		"created", notFoundResult.AlertsCreated,
+		"suppressed", notFoundResult.AlertsSuppressed,
+	)
+
 	s.logger.Info(
 		"brute-force detection completed",
 		"candidates", bruteForceResult.CandidatesFound,

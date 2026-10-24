@@ -61,6 +61,7 @@ func run(logger *slog.Logger) error {
 		Window:                 cfg.DetectionWindow,
 		MinimumCount:           cfg.DetectionMinErrors,
 		BruteForceMinimumCount: cfg.DetectionMinAuthFailures,
+		NotFoundMinimumCount:   cfg.DetectionMinNotFound,
 		SuppressFor:            cfg.DetectionSuppressFor,
 	})
 	if err != nil {

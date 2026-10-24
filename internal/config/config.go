@@ -18,6 +18,7 @@ type Config struct {
 	DetectionMinErrors       int
 	DetectionSuppressFor     time.Duration
 	DetectionMinAuthFailures int
+	DetectionMinNotFound     int
 }
 
 func Load() (Config, error) {
@@ -73,15 +74,25 @@ func Load() (Config, error) {
 	minAuthFailures, err := strconv.Atoi(
 		getEnv("DETECTION_MIN_AUTH_FAILURES", "10"),
 	)
+
 	if err != nil || minAuthFailures < 1 {
 		return Config{}, errors.New(
 			"DETECTION_MIN_AUTH_FAILURES must be a positive integer",
+		)
+	}
+	minNotFound, err := strconv.Atoi(
+		getEnv("DETECTION_MIN_NOT_FOUND", "10"),
+	)
+	if err != nil || minNotFound < 1 {
+		return Config{}, errors.New(
+			"DETECTION_MIN_NOT_FOUND must be a positive integer",
 		)
 	}
 	cfg.DetectionInterval = interval
 	cfg.DetectionWindow = window
 	cfg.DetectionMinErrors = minErrors
 	cfg.DetectionMinAuthFailures = minAuthFailures
+	cfg.DetectionMinNotFound = minNotFound
 	cfg.DetectionSuppressFor = suppressFor
 
 	return cfg, nil

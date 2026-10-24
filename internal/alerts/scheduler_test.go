@@ -2,13 +2,14 @@ package alerts
 
 import (
 	// "context"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
 	"time"
 )
 
-func TestSchedulerRunsBothDetectionRules(t *testing.T) {
+func TestSchedulerRunsAllDetectionRules(t *testing.T) {
 	repo, ctx := setupAlertRepository(t)
 
 	now := time.Now().UTC()
@@ -25,6 +26,20 @@ func TestSchedulerRunsBothDetectionRules(t *testing.T) {
 		`, "scheduler-http-"+string(rune('a'+i)), recent)
 		if err != nil {
 			t.Fatalf("insert HTTP error log: %v", err)
+		}
+	}
+
+	// Insert enough HTTP 404 responses to trigger the third rule.
+	for i := 0; i < 10; i++ {
+		_, err := repo.db.ExecContext(ctx, `
+		INSERT INTO logs (
+			id, website_id, ip, method, path, status,
+			event_type, severity, created_at
+		) VALUES (?, 'website-a', '192.0.2.70', 'GET', ?,
+			404, 'http_request', 'info', ?)
+	`, fmt.Sprintf("scheduler-404-%d", i), fmt.Sprintf("/missing-%d", i), recent)
+		if err != nil {
+			t.Fatalf("insert HTTP 404 log: %v", err)
 		}
 	}
 
@@ -46,6 +61,7 @@ func TestSchedulerRunsBothDetectionRules(t *testing.T) {
 		Window:                 10 * time.Minute,
 		MinimumCount:           3,
 		BruteForceMinimumCount: 3,
+		NotFoundMinimumCount:   10,
 		SuppressFor:            30 * time.Minute,
 	})
 	if err != nil {
@@ -62,10 +78,6 @@ func TestSchedulerRunsBothDetectionRules(t *testing.T) {
 		t.Fatalf("list alerts: %v", err)
 	}
 
-	if len(alerts) != 2 {
-		t.Fatalf("expected 2 alerts from scheduler, got %d: %+v", len(alerts), alerts)
-	}
-
 	foundRules := make(map[string]bool)
 	for _, alert := range alerts {
 		foundRules[alert.RuleKey] = true
@@ -74,7 +86,13 @@ func TestSchedulerRunsBothDetectionRules(t *testing.T) {
 	if !foundRules[HTTP5xxSpikeRuleKey] {
 		t.Error("expected HTTP 5xx spike alert")
 	}
+	if len(alerts) != 3 {
+		t.Fatalf("expected 3 alerts from scheduler, got %d: %+v", len(alerts), alerts)
+	}
 	if !foundRules[BruteForceRuleKey] {
 		t.Error("expected brute-force alert")
+	}
+	if !foundRules[NotFoundRuleKey] {
+		t.Error("expected HTTP 404 spike alert")
 	}
 }

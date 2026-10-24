@@ -36,6 +36,7 @@ func TestDetectorCreatesAndSuppressesHTTP5xxAlerts(t *testing.T) {
 		Window:                 15 * time.Minute,
 		MinimumCount:           3,
 		BruteForceMinimumCount: 10,
+		NotFoundMinimumCount:   10,
 		SuppressFor:            30 * time.Minute,
 	})
 	if err != nil {
@@ -107,6 +108,7 @@ func TestDetectorCreatesAndSuppressesBruteForceAlerts(t *testing.T) {
 		Window:                 15 * time.Minute,
 		MinimumCount:           3,
 		BruteForceMinimumCount: 3,
+		NotFoundMinimumCount:   10,
 		SuppressFor:            30 * time.Minute,
 	})
 	if err != nil {
@@ -175,6 +177,7 @@ func TestDetectorDoesNotSuppressDifferentBruteForceIPs(t *testing.T) {
 		Window:                 15 * time.Minute,
 		MinimumCount:           3,
 		BruteForceMinimumCount: 3,
+		NotFoundMinimumCount:   10,
 		SuppressFor:            30 * time.Minute,
 	})
 	if err != nil {
@@ -266,6 +269,7 @@ func TestAuthenticationFailureIngestionCreatesBruteForceAlert(t *testing.T) {
 		Window:                 5 * time.Minute,
 		MinimumCount:           10,
 		BruteForceMinimumCount: 3,
+		NotFoundMinimumCount:   10,
 		SuppressFor:            30 * time.Minute,
 	})
 	if err != nil {
@@ -298,5 +302,106 @@ func TestAuthenticationFailureIngestionCreatesBruteForceAlert(t *testing.T) {
 	}
 	if alert.Type != "brute_force" {
 		t.Errorf("expected type brute_force, got %q", alert.Type)
+	}
+}
+
+func TestDetectorCreatesAndSuppressesNotFoundAlerts(t *testing.T) {
+	repo, ctx := setupAlertRepository(t)
+
+	recent := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano)
+
+	for i := 0; i < 10; i++ {
+		_, err := repo.db.ExecContext(ctx, `
+			INSERT INTO logs (
+				id, website_id, ip, method, path, status,
+				event_type, severity, created_at
+			) VALUES (?, 'website-a', '192.0.2.80', 'GET', ?,
+				404, 'http_request', 'info', ?)
+		`, fmt.Sprintf("not-found-log-%d", i),
+			fmt.Sprintf("/missing-%d", i), recent)
+		if err != nil {
+			t.Fatalf("insert HTTP 404 log: %v", err)
+		}
+	}
+
+	detector, err := NewDetector(repo, DetectorConfig{
+		Window:                 10 * time.Minute,
+		MinimumCount:           3,
+		BruteForceMinimumCount: 3,
+		NotFoundMinimumCount:   10,
+		SuppressFor:            30 * time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("NewDetector() error: %v", err)
+	}
+
+	first, err := detector.RunNotFoundDetection(ctx)
+	if err != nil {
+		t.Fatalf("first 404 detection: %v", err)
+	}
+	if first.CandidatesFound != 1 || first.AlertsCreated != 1 {
+		t.Fatalf("expected one candidate and one alert, got %+v", first)
+	}
+
+	second, err := detector.RunNotFoundDetection(ctx)
+	if err != nil {
+		t.Fatalf("second 404 detection: %v", err)
+	}
+	if second.AlertsCreated != 0 || second.AlertsSuppressed != 1 {
+		t.Fatalf("expected duplicate alert suppression, got %+v", second)
+	}
+
+	alerts, err := repo.List(ctx, "org-a", "open", 50, 0)
+	if err != nil {
+		t.Fatalf("list alerts: %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("expected one open alert, got %d", len(alerts))
+	}
+	if alerts[0].RuleKey != NotFoundRuleKey {
+		t.Errorf("expected rule key %q, got %q",
+			NotFoundRuleKey, alerts[0].RuleKey)
+	}
+	if alerts[0].Type != "http_404_spike" {
+		t.Errorf("expected type http_404_spike, got %q", alerts[0].Type)
+	}
+}
+
+func TestDetectorDoesNotAlertBelowNotFoundThreshold(t *testing.T) {
+	repo, ctx := setupAlertRepository(t)
+
+	recent := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano)
+
+	for i := 0; i < 9; i++ {
+		_, err := repo.db.ExecContext(ctx, `
+			INSERT INTO logs (
+				id, website_id, ip, method, path, status,
+				event_type, severity, created_at
+			) VALUES (?, 'website-a', '192.0.2.81', 'GET', ?,
+				404, 'http_request', 'info', ?)
+		`, fmt.Sprintf("below-threshold-%d", i),
+			fmt.Sprintf("/missing-%d", i), recent)
+		if err != nil {
+			t.Fatalf("insert HTTP 404 log: %v", err)
+		}
+	}
+
+	detector, err := NewDetector(repo, DetectorConfig{
+		Window:                 10 * time.Minute,
+		MinimumCount:           3,
+		BruteForceMinimumCount: 3,
+		NotFoundMinimumCount:   10,
+		SuppressFor:            30 * time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("NewDetector() error: %v", err)
+	}
+
+	result, err := detector.RunNotFoundDetection(ctx)
+	if err != nil {
+		t.Fatalf("404 detection: %v", err)
+	}
+	if result.CandidatesFound != 0 || result.AlertsCreated != 0 {
+		t.Fatalf("expected no candidates or alerts below threshold, got %+v", result)
 	}
 }

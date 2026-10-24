@@ -138,3 +138,69 @@ func (r *Repository) FindBruteForceCandidates(
 
 	return candidates, nil
 }
+
+type NotFoundCandidate struct {
+	OrganizationID string
+	WebsiteID      string
+	ErrorCount     int
+	FirstSeen      string
+	LastSeen       string
+}
+
+// FindNotFoundCandidates finds active websites with repeated HTTP 404 responses.
+func (r *Repository) FindNotFoundCandidates(
+	ctx context.Context,
+	since time.Time,
+	minimumCount int,
+) ([]NotFoundCandidate, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("alert repository is not initialized")
+	}
+	if minimumCount < 1 {
+		return nil, fmt.Errorf("minimum count must be positive")
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT
+			w.organization_id,
+			l.website_id,
+			COUNT(*),
+			MIN(l.created_at),
+			MAX(l.created_at)
+		FROM logs l
+		JOIN websites w ON w.id = l.website_id
+		WHERE w.status = 'active'
+		  AND l.status = 404
+		  AND l.created_at >= ?
+		GROUP BY w.organization_id, l.website_id
+		HAVING COUNT(*) >= ?
+		ORDER BY COUNT(*) DESC, l.website_id ASC
+	`, since.UTC().Format(time.RFC3339Nano), minimumCount)
+	if err != nil {
+		return nil, fmt.Errorf("find HTTP 404 candidates: %w", err)
+	}
+	defer rows.Close()
+
+	candidates := make([]NotFoundCandidate, 0)
+
+	for rows.Next() {
+		var candidate NotFoundCandidate
+		if err := rows.Scan(
+			&candidate.OrganizationID,
+			&candidate.WebsiteID,
+			&candidate.ErrorCount,
+			&candidate.FirstSeen,
+			&candidate.LastSeen,
+		); err != nil {
+			return nil, fmt.Errorf("scan HTTP 404 candidate: %w", err)
+		}
+
+		candidates = append(candidates, candidate)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate HTTP 404 candidates: %w", err)
+	}
+
+	return candidates, nil
+}

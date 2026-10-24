@@ -13,6 +13,7 @@ type DetectorConfig struct {
 	MinimumCount           int
 	BruteForceMinimumCount int
 	SuppressFor            time.Duration
+	NotFoundMinimumCount   int
 }
 
 type Detector struct {
@@ -41,6 +42,9 @@ func NewDetector(repo *Repository, config DetectorConfig) (*Detector, error) {
 	}
 	if config.SuppressFor <= 0 {
 		return nil, fmt.Errorf("suppression duration must be positive")
+	}
+	if config.NotFoundMinimumCount < 1 {
+		return nil, fmt.Errorf("404 minimum count must be positive")
 	}
 
 	return &Detector{
@@ -190,6 +194,78 @@ func (d *Detector) RunBruteForceDetection(
 				candidate.WebsiteID,
 				candidate.IP,
 				err,
+			)
+		}
+
+		result.AlertsCreated++
+	}
+
+	return result, nil
+}
+
+const NotFoundRuleKey = "http.404_spike"
+
+// RunNotFoundDetection detects repeated HTTP 404 responses.
+func (d *Detector) RunNotFoundDetection(
+	ctx context.Context,
+) (DetectionResult, error) {
+	if d == nil || d.repo == nil {
+		return DetectionResult{}, fmt.Errorf("detector is not initialized")
+	}
+
+	now := time.Now().UTC()
+	candidates, err := d.repo.FindNotFoundCandidates(
+		ctx,
+		now.Add(-d.config.Window),
+		d.config.NotFoundMinimumCount,
+	)
+	if err != nil {
+		return DetectionResult{}, fmt.Errorf("query HTTP 404 candidates: %w", err)
+	}
+
+	result := DetectionResult{CandidatesFound: len(candidates)}
+
+	for _, candidate := range candidates {
+		since := now.Add(-d.config.SuppressFor)
+
+		exists, err := d.repo.HasRecentOpenAlert(
+			ctx,
+			candidate.WebsiteID,
+			NotFoundRuleKey,
+			since,
+		)
+		if err != nil {
+			return result, fmt.Errorf(
+				"check duplicate HTTP 404 alert for website %s: %w",
+				candidate.WebsiteID, err,
+			)
+		}
+
+		if exists {
+			result.AlertsSuppressed++
+			continue
+		}
+
+		_, err = d.repo.Create(ctx, CreateInput{
+			WebsiteID: candidate.WebsiteID,
+			Severity:  "medium",
+			Type:      "http_404_spike",
+			Message: fmt.Sprintf(
+				"Detected %d HTTP 404 responses within the configured detection window",
+				candidate.ErrorCount,
+			),
+			RuleKey: NotFoundRuleKey,
+			Details: map[string]any{
+				"error_count": candidate.ErrorCount,
+				"window":      d.config.Window.String(),
+				"first_seen":  candidate.FirstSeen,
+				"last_seen":   candidate.LastSeen,
+			},
+		})
+		if err != nil {
+			return result, fmt.Errorf(
+				"create HTTP 404 alert for website %s: %w",
+				candidate.WebsiteID, err,
 			)
 		}
 

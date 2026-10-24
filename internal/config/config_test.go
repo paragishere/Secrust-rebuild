@@ -15,6 +15,7 @@ func clearConfigEnv(t *testing.T) {
 		"DETECTION_INTERVAL",
 		"DETECTION_WINDOW",
 		"DETECTION_MIN_ERRORS",
+		"DETECTION_MIN_AUTH_FAILURES",
 		"DETECTION_SUPPRESS_FOR",
 	} {
 		t.Setenv(key, "")
@@ -38,6 +39,10 @@ func TestLoadDetectionDefaults(t *testing.T) {
 	if cfg.DetectionMinErrors != 10 {
 		t.Errorf("expected 10 minimum errors, got %d", cfg.DetectionMinErrors)
 	}
+	if cfg.DetectionMinAuthFailures != 10 {
+		t.Errorf("expected 10 minimum auth failures, got %d",
+			cfg.DetectionMinAuthFailures)
+	}
 	if cfg.DetectionSuppressFor != 30*time.Minute {
 		t.Errorf("expected 30m suppression, got %s", cfg.DetectionSuppressFor)
 	}
@@ -55,6 +60,9 @@ func TestLoadRejectsInvalidDetectionConfig(t *testing.T) {
 		{"negative window", "DETECTION_WINDOW", "-1m"},
 		{"invalid minimum", "DETECTION_MIN_ERRORS", "zero"},
 		{"zero minimum", "DETECTION_MIN_ERRORS", "0"},
+		{"invalid auth failure minimum", "DETECTION_MIN_AUTH_FAILURES", "abc"},
+		{"zero auth failure minimum", "DETECTION_MIN_AUTH_FAILURES", "0"},
+		{"negative auth failure minimum", "DETECTION_MIN_AUTH_FAILURES", "-1"},
 		{"invalid suppression", "DETECTION_SUPPRESS_FOR", "abc"},
 		{"zero suppression", "DETECTION_SUPPRESS_FOR", "0s"},
 	}
@@ -76,6 +84,7 @@ func TestLoadAcceptsCustomDetectionConfig(t *testing.T) {
 	t.Setenv("DETECTION_INTERVAL", "30s")
 	t.Setenv("DETECTION_WINDOW", "10m")
 	t.Setenv("DETECTION_MIN_ERRORS", "20")
+	t.Setenv("DETECTION_MIN_AUTH_FAILURES", "5")
 	t.Setenv("DETECTION_SUPPRESS_FOR", "45m")
 
 	cfg, err := Load()
@@ -86,6 +95,7 @@ func TestLoadAcceptsCustomDetectionConfig(t *testing.T) {
 	if cfg.DetectionInterval != 30*time.Second ||
 		cfg.DetectionWindow != 10*time.Minute ||
 		cfg.DetectionMinErrors != 20 ||
+		cfg.DetectionMinAuthFailures != 5 ||
 		cfg.DetectionSuppressFor != 45*time.Minute {
 		t.Fatalf("unexpected detection configuration: %+v", cfg)
 	}

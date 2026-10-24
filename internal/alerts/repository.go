@@ -324,3 +324,36 @@ func (r *Repository) HasRecentOpenAlert(
 
 	return exists == 1, nil
 }
+
+func (r *Repository) HasRecentOpenAlertForIP(
+	ctx context.Context,
+	websiteID string,
+	ruleKey string,
+	ip string,
+	since time.Time,
+) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, fmt.Errorf("alert repository is not initialized")
+	}
+
+	var exists int
+	err := r.db.QueryRowContext(ctx, `
+		SELECT 1
+		FROM alerts
+		WHERE website_id = ?
+		  AND rule_key = ?
+		  AND ip = ?
+		  AND status = 'open'
+		  AND created_at >= ?
+		LIMIT 1
+	`, websiteID, ruleKey, ip, since.UTC().Format(time.RFC3339Nano)).Scan(&exists)
+
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check recent IP alert: %w", err)
+	}
+
+	return true, nil
+}

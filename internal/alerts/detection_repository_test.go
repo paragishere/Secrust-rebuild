@@ -1,71 +1,140 @@
 package alerts
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
 
-func TestFindHTTPErrorSpikesUsesThresholdAndTimeWindow(t *testing.T) {
+func TestFindBruteForceCandidates(t *testing.T) {
 	repo, ctx := setupAlertRepository(t)
 
-	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
-	recent := now.Add(-5 * time.Minute).Format(time.RFC3339Nano)
-	old := now.Add(-2 * time.Hour).Format(time.RFC3339Nano)
+	now := time.Now().UTC()
+	since := now.Add(-10 * time.Minute)
 
-	insertLog := func(id, websiteID string, status int, createdAt string) {
+	insertLog := func(id, websiteID, ip, eventType string, createdAt time.Time) {
 		t.Helper()
+
 		_, err := repo.db.ExecContext(ctx, `
-INSERT INTO logs (
-id, website_id, method, path, status,
-event_type, severity, created_at
-) VALUES (?, ?, 'GET', '/', ?, 'http_request', 'info', ?)
-`, id, websiteID, status, createdAt)
+			INSERT INTO logs (
+				id, website_id, ip, method, path, status,
+				user_agent, country, city, event_type, severity, created_at
+			) VALUES (?, ?, ?, 'POST', '/login', 401, 'test-agent',
+				'', '', ?, 'low', ?)
+		`,
+			id, websiteID, ip, eventType,
+			createdAt.UTC().Format(time.RFC3339Nano),
+		)
 		if err != nil {
-			t.Fatalf("insert test log: %v", err)
+			t.Fatalf("insert test log %s: %v", id, err)
 		}
 	}
 
-	insertLog("recent-1", "website-a", 500, recent)
-	insertLog("recent-2", "website-a", 502, recent)
-	insertLog("recent-3", "website-a", 503, recent)
-	insertLog("recent-4", "website-b", 500, recent)
-	insertLog("recent-5", "website-b", 502, recent)
-	insertLog("old-1", "website-b", 500, old)
-	insertLog("old-2", "website-b", 501, old)
-	insertLog("old-3", "website-b", 503, old)
+	// Three failures from the same IP on website A.
+	for i := 0; i < 3; i++ {
+		insertLog(
+			fmt.Sprintf("failure-a-%d", i),
+			"website-a",
+			"192.0.2.10",
+			"auth_failure",
+			now.Add(-time.Duration(i)*time.Minute),
+		)
+	}
 
-	candidates, err := repo.FindHTTPErrorSpikes(
-		ctx, now.Add(-15*time.Minute), 3,
+	// Two failures from a different IP: below the threshold.
+	for i := 0; i < 2; i++ {
+		insertLog(
+			fmt.Sprintf("failure-b-%d", i),
+			"website-a",
+			"192.0.2.20",
+			"auth_failure",
+			now.Add(-time.Duration(i)*time.Minute),
+		)
+	}
+
+	// Failures on website B must be grouped separately.
+	for i := 0; i < 3; i++ {
+		insertLog(
+			fmt.Sprintf("failure-c-%d", i),
+			"website-b",
+			"192.0.2.10",
+			"auth_failure",
+			now.Add(-time.Duration(i)*time.Minute),
+		)
+	}
+
+	// A different event type must not count as an authentication failure.
+	for i := 0; i < 5; i++ {
+		insertLog(
+			fmt.Sprintf("other-event-%d", i),
+			"website-a",
+			"192.0.2.30",
+			"http_request",
+			now.Add(-time.Duration(i)*time.Minute),
+		)
+	}
+
+	// An authentication failure outside the detection window must be ignored.
+	insertLog(
+		"old-failure",
+		"website-a",
+		"192.0.2.40",
+		"auth_failure",
+		since.Add(-time.Minute),
 	)
+
+	// A blank IP must not produce a candidate.
+	for i := 0; i < 3; i++ {
+		insertLog(
+			fmt.Sprintf("blank-ip-%d", i),
+			"website-a",
+			"",
+			"auth_failure",
+			now.Add(-time.Duration(i)*time.Minute),
+		)
+	}
+
+	candidates, err := repo.FindBruteForceCandidates(ctx, since, 3)
 	if err != nil {
-		t.Fatalf("FindHTTPErrorSpikes() error: %v", err)
+		t.Fatalf("FindBruteForceCandidates() error: %v", err)
 	}
 
-	if len(candidates) != 1 {
-		t.Fatalf("expected 1 candidate, got %d: %+v", len(candidates), candidates)
+	if len(candidates) != 2 {
+		t.Fatalf("expected 2 candidates, got %d: %+v", len(candidates), candidates)
 	}
 
-	got := candidates[0]
-	if got.OrganizationID != "org-a" {
-		t.Errorf("expected org-a, got %q", got.OrganizationID)
+	found := make(map[string]BruteForceCandidate)
+	for _, candidate := range candidates {
+		key := candidate.WebsiteID + "|" + candidate.IP
+		found[key] = candidate
 	}
-	if got.WebsiteID != "website-a" {
-		t.Errorf("expected website-a, got %q", got.WebsiteID)
-	}
-	if got.ErrorCount != 3 {
-		t.Errorf("expected 3 errors, got %d", got.ErrorCount)
-	}
-	if got.FirstSeen != recent || got.LastSeen != recent {
-		t.Errorf("unexpected time range: first=%q last=%q", got.FirstSeen, got.LastSeen)
+
+	for _, key := range []string{
+		"website-a|192.0.2.10",
+		"website-b|192.0.2.10",
+	} {
+		candidate, ok := found[key]
+		if !ok {
+			t.Errorf("expected candidate %s", key)
+			continue
+		}
+
+		if candidate.FailureCount != 3 {
+			t.Errorf("%s: expected 3 failures, got %d", key, candidate.FailureCount)
+		}
+		if candidate.OrganizationID == "" {
+			t.Errorf("%s: expected organization ID", key)
+		}
+		if candidate.FirstSeen == "" || candidate.LastSeen == "" {
+			t.Errorf("%s: expected first and last seen timestamps", key)
+		}
 	}
 }
 
-func TestFindHTTPErrorSpikesRejectsInvalidThreshold(t *testing.T) {
+func TestFindBruteForceCandidatesRejectsInvalidThreshold(t *testing.T) {
 	repo, ctx := setupAlertRepository(t)
 
-	_, err := repo.FindHTTPErrorSpikes(
-		ctx, time.Now().Add(-time.Hour), 0,
-	)
+	_, err := repo.FindBruteForceCandidates(ctx, time.Now().UTC(), 0)
 	if err == nil {
 		t.Fatal("expected an error for zero threshold")
 	}

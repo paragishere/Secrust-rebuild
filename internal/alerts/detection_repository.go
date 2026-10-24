@@ -69,3 +69,72 @@ func (r *Repository) FindHTTPErrorSpikes(
 
 	return candidates, nil
 }
+
+type BruteForceCandidate struct {
+	OrganizationID string
+	WebsiteID      string
+	IP             string
+	FailureCount   int
+	FirstSeen      string
+	LastSeen       string
+}
+
+// FindBruteForceCandidates finds source IPs with repeated authentication failures.
+func (r *Repository) FindBruteForceCandidates(
+	ctx context.Context,
+	since time.Time,
+	minimumCount int,
+) ([]BruteForceCandidate, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("alert repository is not initialized")
+	}
+	if minimumCount < 1 {
+		return nil, fmt.Errorf("minimum count must be positive")
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT
+			w.organization_id,
+			l.website_id,
+			l.ip,
+			COUNT(*),
+			MIN(l.created_at),
+			MAX(l.created_at)
+		FROM logs l
+		JOIN websites w ON w.id = l.website_id
+		WHERE w.status = 'active'
+		  AND l.event_type = 'auth_failure'
+		  AND l.ip IS NOT NULL
+		  AND trim(l.ip) <> ''
+		  AND l.created_at >= ?
+		GROUP BY w.organization_id, l.website_id, l.ip
+		HAVING COUNT(*) >= ?
+		ORDER BY COUNT(*) DESC, l.website_id ASC, l.ip ASC
+	`, since.UTC().Format(time.RFC3339Nano), minimumCount)
+	if err != nil {
+		return nil, fmt.Errorf("find brute-force candidates: %w", err)
+	}
+	defer rows.Close()
+
+	candidates := make([]BruteForceCandidate, 0)
+	for rows.Next() {
+		var candidate BruteForceCandidate
+		if err := rows.Scan(
+			&candidate.OrganizationID,
+			&candidate.WebsiteID,
+			&candidate.IP,
+			&candidate.FailureCount,
+			&candidate.FirstSeen,
+			&candidate.LastSeen,
+		); err != nil {
+			return nil, fmt.Errorf("scan brute-force candidate: %w", err)
+		}
+		candidates = append(candidates, candidate)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate brute-force candidates: %w", err)
+	}
+
+	return candidates, nil
+}

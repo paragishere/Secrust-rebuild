@@ -25,9 +25,10 @@ func TestDetectorCreatesAndSuppressesHTTP5xxAlerts(t *testing.T) {
 	}
 
 	detector, err := NewDetector(repo, DetectorConfig{
-		Window:       15 * time.Minute,
-		MinimumCount: 3,
-		SuppressFor:  30 * time.Minute,
+		Window:                 15 * time.Minute,
+		MinimumCount:           3,
+		BruteForceMinimumCount: 10,
+		SuppressFor:            30 * time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("NewDetector() error: %v", err)

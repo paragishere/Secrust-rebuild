@@ -9,14 +9,15 @@ import (
 )
 
 type Config struct {
-	Port                 string
-	DatabasePath         string
-	SessionSecret        string
-	Environment          string
-	DetectionInterval    time.Duration
-	DetectionWindow      time.Duration
-	DetectionMinErrors   int
-	DetectionSuppressFor time.Duration
+	Port                     string
+	DatabasePath             string
+	SessionSecret            string
+	Environment              string
+	DetectionInterval        time.Duration
+	DetectionWindow          time.Duration
+	DetectionMinErrors       int
+	DetectionSuppressFor     time.Duration
+	DetectionMinAuthFailures int
 }
 
 func Load() (Config, error) {
@@ -69,10 +70,18 @@ func Load() (Config, error) {
 	if err != nil || minErrors < 1 {
 		return Config{}, errors.New("DETECTION_MIN_ERRORS must be a positive integer")
 	}
-
+	minAuthFailures, err := strconv.Atoi(
+		getEnv("DETECTION_MIN_AUTH_FAILURES", "10"),
+	)
+	if err != nil || minAuthFailures < 1 {
+		return Config{}, errors.New(
+			"DETECTION_MIN_AUTH_FAILURES must be a positive integer",
+		)
+	}
 	cfg.DetectionInterval = interval
 	cfg.DetectionWindow = window
 	cfg.DetectionMinErrors = minErrors
+	cfg.DetectionMinAuthFailures = minAuthFailures
 	cfg.DetectionSuppressFor = suppressFor
 
 	return cfg, nil

@@ -291,7 +291,106 @@
                 font-size: 24px;
             }
         }
-    </style>
+    
+        /* Alert Management */
+        .alert-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 16px 0;
+        }
+
+        .alert-filters {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) auto;
+            gap: 12px;
+            align-items: end;
+            margin: 16px 0;
+        }
+
+        .alert-filters select {
+            width: 100%;
+            padding: 10px;
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid #374151;
+            border-radius: 6px;
+        }
+
+        .alert-row { cursor: pointer; }
+
+        .alert-row:focus {
+            outline: 2px solid var(--blue);
+            outline-offset: -2px;
+        }
+
+        .alert-row.selected { background: #172033; }
+
+        .alert-status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .alert-open { color: #fecaca; background: #7f1d1d; }
+        .alert-acknowledged { color: #fde68a; background: #713f12; }
+        .alert-resolved { color: #bbf7d0; background: #14532d; }
+
+        .alert-details-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin: 18px 0;
+        }
+
+        .alert-detail {
+            min-width: 0;
+            padding: 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .alert-detail strong {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .alert-detail span { overflow-wrap: anywhere; }
+
+        #alertDetails pre {
+            padding: 14px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: auto;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 24px 0;
+        }
+
+        [hidden] { display: none !important; }
+
+        @media (max-width: 600px) {
+            .alert-filters,
+            .alert-details-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+</style>
 </head>
 
 <body>
@@ -354,6 +453,79 @@
             Loading websites...
         </div>
     </section>
+
+
+    <!-- Alert Management -->
+    <section class="card" id="alertManagement">
+        <div class="toolbar">
+            <div>
+                <h2>Security Alerts</h2>
+                <p class="muted">Review, investigate, acknowledge and resolve detections.</p>
+            </div>
+            <button id="refreshAlerts" type="button">Refresh Alerts</button>
+        </div>
+
+        <div class="alert-filters">
+            <div class="filter-field">
+                <label for="alertStatusFilter">Alert status</label>
+                <select id="alertStatusFilter">
+                    <option value="">All statuses</option>
+                    <option value="open">Open</option>
+                    <option value="acknowledged">Acknowledged</option>
+                    <option value="resolved">Resolved</option>
+                </select>
+            </div>
+            <div>
+                <button id="applyAlertFilters" type="button">Apply Filter</button>
+                <button id="clearAlertFilters" type="button" class="secondary">Clear</button>
+            </div>
+        </div>
+
+        <p id="alertsMessage" class="muted" role="status" aria-live="polite">Loading alerts...</p>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Created (UTC)</th>
+                        <th>Severity</th>
+                        <th>Alert</th>
+                        <th>Source IP</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="alertsTableBody">
+                    <tr><td colspan="6" class="empty-state">Loading alerts...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <p id="alertsPaginationInfo" class="muted">Page 1</p>
+            <div>
+                <button id="previousAlertsPage" type="button" class="secondary" disabled>Previous</button>
+                <button id="nextAlertsPage" type="button" disabled>Next</button>
+            </div>
+        </div>
+
+        <section id="alertDetailsPanel" hidden>
+            <div class="divider"></div>
+            <div class="alert-toolbar">
+                <div>
+                    <h2>Alert Details</h2>
+                    <p id="alertDetailsMessage" class="muted" role="status" aria-live="polite">Select an alert to investigate.</p>
+                </div>
+                <button id="closeAlertDetails" type="button" class="secondary">Close Details</button>
+            </div>
+            <div id="alertDetails"></div>
+            <div id="alertActions" hidden>
+                <button id="acknowledgeAlert" type="button">Acknowledge</button>
+                <button id="resolveAlert" type="button">Resolve</button>
+            </div>
+        </section>
+    </section>
+
 
     <!-- Logs Explorer -->
     <section class="card">
@@ -939,8 +1111,388 @@ nextPageButton.addEventListener("click", () => {
     loadLogs();
 });
 
+
+// Alert Management
+const alertsTableBody = document.getElementById("alertsTableBody");
+const alertsMessage = document.getElementById("alertsMessage");
+const alertsPaginationInfo = document.getElementById("alertsPaginationInfo");
+const previousAlertsPage = document.getElementById("previousAlertsPage");
+const nextAlertsPage = document.getElementById("nextAlertsPage");
+
+const ALERT_PAGE_SIZE = 20;
+let alertOffset = 0;
+let alertsLoading = false;
+let selectedAlertID = "";
+let selectedAlertStatus = "";
+
+function normalizeAlert(raw) {
+    if (!raw || typeof raw !== "object") return null;
+
+    // Supports snake_case JSON tags and Go's default exported field names.
+    const pick = (...keys) => {
+        for (const key of keys) {
+            if (raw[key] !== undefined) return raw[key];
+        }
+        return undefined;
+    };
+
+    return {
+        id: pick("id", "ID"),
+        organization_id: pick("organization_id", "OrganizationID"),
+        website_id: pick("website_id", "WebsiteID"),
+        severity: pick("severity", "Severity"),
+        type: pick("type", "Type"),
+        message: pick("message", "Message"),
+        ip: pick("ip", "IP"),
+        status: pick("status", "Status"),
+        rule_key: pick("rule_key", "RuleKey"),
+        details: pick("details", "Details"),
+        created_at: pick("created_at", "CreatedAt"),
+        acknowledged_by: pick("acknowledged_by", "AcknowledgedBy"),
+        acknowledged_at: pick("acknowledged_at", "AcknowledgedAt"),
+        resolved_by: pick("resolved_by", "ResolvedBy"),
+        resolved_at: pick("resolved_at", "ResolvedAt")
+    };
+}
+
+function alertStatusClass(status) {
+    const value = String(status || "").toLowerCase();
+    return ["open", "acknowledged", "resolved"].includes(value)
+        ? "alert-status alert-" + value
+        : "alert-status";
+}
+
+function addAlertDetail(parent, label, value) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "alert-detail";
+
+    const heading = document.createElement("strong");
+    heading.textContent = label;
+
+    const content = document.createElement("span");
+    content.textContent = value === null || value === undefined || value === ""
+        ? "—"
+        : String(value);
+
+    wrapper.append(heading, content);
+    parent.appendChild(wrapper);
+}
+
+function renderAlertDetails(alert) {
+    const container = document.getElementById("alertDetails");
+    const panel = document.getElementById("alertDetailsPanel");
+    const actions = document.getElementById("alertActions");
+
+    container.replaceChildren();
+    panel.hidden = false;
+
+    const grid = document.createElement("div");
+    grid.className = "alert-details-grid";
+
+    addAlertDetail(grid, "Alert ID", alert.id);
+    addAlertDetail(grid, "Organization", alert.organization_id);
+    addAlertDetail(grid, "Website ID", alert.website_id);
+    addAlertDetail(grid, "Severity", alert.severity);
+    addAlertDetail(grid, "Type", alert.type);
+    addAlertDetail(grid, "Rule Key", alert.rule_key);
+    addAlertDetail(grid, "Source IP", alert.ip);
+    addAlertDetail(grid, "Status", alert.status);
+    addAlertDetail(grid, "Created (UTC)", formatTimestamp(alert.created_at));
+    addAlertDetail(grid, "Acknowledged By", alert.acknowledged_by);
+    addAlertDetail(grid, "Acknowledged At (UTC)", formatTimestamp(alert.acknowledged_at));
+    addAlertDetail(grid, "Resolved By", alert.resolved_by);
+    addAlertDetail(grid, "Resolved At (UTC)", formatTimestamp(alert.resolved_at));
+    container.appendChild(grid);
+
+    const messageHeading = document.createElement("h3");
+    messageHeading.textContent = "Alert Message";
+    container.appendChild(messageHeading);
+
+    const message = document.createElement("p");
+    message.textContent = alert.message || "No message available.";
+    container.appendChild(message);
+
+    const detailsHeading = document.createElement("h3");
+    detailsHeading.textContent = "Detection Details";
+    container.appendChild(detailsHeading);
+
+    const details = document.createElement("pre");
+    details.textContent = JSON.stringify(alert.details || {}, null, 2);
+    container.appendChild(details);
+
+    document.getElementById("alertDetailsMessage").textContent =
+        "Viewing alert " + (alert.id || "");
+
+    selectedAlertID = alert.id || "";
+    selectedAlertStatus = String(alert.status || "").toLowerCase();
+
+    // The server remains authoritative for authorization.
+    actions.hidden = !["open", "acknowledged"].includes(selectedAlertStatus);
+    document.getElementById("acknowledgeAlert").hidden = selectedAlertStatus !== "open";
+    document.getElementById("resolveAlert").hidden =
+        !["open", "acknowledged"].includes(selectedAlertStatus);
+}
+
+async function openAlertDetails(alertID) {
+    const panel = document.getElementById("alertDetailsPanel");
+    const container = document.getElementById("alertDetails");
+    const message = document.getElementById("alertDetailsMessage");
+
+    panel.hidden = false;
+    container.replaceChildren();
+    message.textContent = "Loading alert details...";
+
+    try {
+        const response = await fetch("/api/alerts/" + encodeURIComponent(alertID), {
+            method: "GET",
+            credentials: "same-origin",
+            headers: { "Accept": "application/json" }
+        });
+        const data = await readJSON(response);
+
+        if (response.redirected) {
+            message.textContent = "Your session may have expired. Log in again.";
+            return;
+        }
+        if (!response.ok) {
+            message.textContent = data.error || `Unable to load alert (HTTP ${response.status}).`;
+            return;
+        }
+        if (!data || typeof data !== "object" || !data.id) {
+            message.textContent = "Unexpected response from alert API.";
+            return;
+        }
+        renderAlertDetails(data);
+    } catch {
+        message.textContent = "Unable to connect to the alert API.";
+    }
+}
+
+function renderAlerts(alerts) {
+    alertsTableBody.replaceChildren();
+
+    if (alerts.length === 0) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 6;
+        cell.className = "empty-state";
+        cell.textContent = "No alerts found.";
+        row.appendChild(cell);
+        alertsTableBody.appendChild(row);
+        return;
+    }
+
+    for (const alert of alerts) {
+        const row = document.createElement("tr");
+        row.className = "alert-row";
+        row.tabIndex = 0;
+        row.setAttribute("role", "button");
+        row.setAttribute("aria-label", "View alert: " + (alert.message || alert.id || "Security alert"));
+
+        if (String(alert.id) === String(selectedAlertID)) row.classList.add("selected");
+
+        row.appendChild(createCell(formatTimestamp(alert.created_at)));
+
+        const severityCell = document.createElement("td");
+        const severityBadge = document.createElement("span");
+        severityBadge.className = "badge " + severityClass(alert.severity);
+        severityBadge.textContent = alert.severity || "unknown";
+        severityCell.appendChild(severityBadge);
+        row.appendChild(severityCell);
+
+        row.appendChild(createCell(alert.message || alert.type));
+        row.appendChild(createCell(alert.ip));
+
+        const statusCell = document.createElement("td");
+        const statusBadge = document.createElement("span");
+        statusBadge.className = alertStatusClass(alert.status);
+        statusBadge.textContent = alert.status || "unknown";
+        statusCell.appendChild(statusBadge);
+        row.appendChild(statusCell);
+
+        const actionCell = document.createElement("td");
+        const viewButton = document.createElement("button");
+        viewButton.type = "button";
+        viewButton.textContent = "View Details";
+        viewButton.addEventListener("click", event => {
+            event.stopPropagation();
+            openAlertDetails(alert.id);
+        });
+        actionCell.appendChild(viewButton);
+        row.appendChild(actionCell);
+
+        row.addEventListener("click", () => openAlertDetails(alert.id));
+        row.addEventListener("keydown", event => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openAlertDetails(alert.id);
+            }
+        });
+        alertsTableBody.appendChild(row);
+    }
+}
+
+async function loadAlerts() {
+    if (alertsLoading) return;
+
+    alertsLoading = true;
+    document.getElementById("refreshAlerts").disabled = true;
+    document.getElementById("applyAlertFilters").disabled = true;
+    previousAlertsPage.disabled = true;
+    nextAlertsPage.disabled = true;
+    alertsMessage.textContent = "Loading alerts...";
+    alertsMessage.className = "muted";
+
+    const params = new URLSearchParams({
+        limit: String(ALERT_PAGE_SIZE),
+        offset: String(alertOffset)
+    });
+    const status = document.getElementById("alertStatusFilter").value;
+    if (status) params.set("status", status);
+
+    try {
+        const response = await fetch("/api/alerts?" + params.toString(), {
+            method: "GET",
+            credentials: "same-origin",
+            headers: { "Accept": "application/json" }
+        });
+        const data = await readJSON(response);
+
+        if (response.redirected) {
+            alertsMessage.textContent = "Your session may have expired. Log in again.";
+            alertsMessage.className = "error";
+            renderAlerts([]);
+            return;
+        }
+        if (!response.ok) {
+            alertsMessage.textContent = data.error || `Unable to load alerts (HTTP ${response.status}).`;
+            alertsMessage.className = "error";
+            renderAlerts([]);
+            return;
+        }
+        const rawAlerts = Array.isArray(data.alerts) ? data.alerts
+            : Array.isArray(data.Alerts) ? data.Alerts
+            : Array.isArray(data.data) ? data.data
+            : null;
+
+        if (!rawAlerts) {
+            alertsMessage.textContent = "Unexpected response from alerts API.";
+            alertsMessage.className = "error";
+            renderAlerts([]);
+            return;
+        }
+
+        const alerts = rawAlerts.map(normalizeAlert).filter(alert => alert && alert.id);
+        renderAlerts(alerts);
+        alertsMessage.textContent = alerts.length
+            ? `Loaded ${alerts.length} alert(s).`
+            : "No alerts match the selected filters.";
+        alertsMessage.className = alerts.length ? "success" : "muted";
+
+        const pageNumber = Math.floor(alertOffset / ALERT_PAGE_SIZE) + 1;
+        alertsPaginationInfo.textContent = "Page " + pageNumber;
+        previousAlertsPage.disabled = alertOffset === 0;
+        nextAlertsPage.disabled = alerts.length < ALERT_PAGE_SIZE;
+    } catch {
+        alertsMessage.textContent = "Unable to connect to the alerts API.";
+        alertsMessage.className = "error";
+        renderAlerts([]);
+    } finally {
+        alertsLoading = false;
+        document.getElementById("refreshAlerts").disabled = false;
+        document.getElementById("applyAlertFilters").disabled = false;
+    }
+}
+
+async function updateAlertStatus(action) {
+    if (!selectedAlertID) return;
+
+    const csrfToken = getCookie("secrust_csrf");
+    if (!csrfToken) {
+        document.getElementById("alertDetailsMessage").textContent =
+            "CSRF token is missing. Refresh the dashboard and try again.";
+        return;
+    }
+
+    const acknowledgeButton = document.getElementById("acknowledgeAlert");
+    const resolveButton = document.getElementById("resolveAlert");
+    acknowledgeButton.disabled = true;
+    resolveButton.disabled = true;
+
+    const alertID = selectedAlertID;
+
+    try {
+        const response = await fetch(
+            "/api/alerts/" + encodeURIComponent(alertID) + "/" + action,
+            {
+                method: "PATCH",
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "X-CSRF-Token": csrfToken
+                }
+            }
+        );
+        const data = await readJSON(response);
+
+        if (response.redirected) {
+            document.getElementById("alertDetailsMessage").textContent =
+                "Your session may have expired. Log in again.";
+            return;
+        }
+        if (!response.ok) {
+            document.getElementById("alertDetailsMessage").textContent =
+                data.error || `Action failed (HTTP ${response.status}).`;
+            return;
+        }
+
+        document.getElementById("alertDetailsMessage").textContent =
+            action === "acknowledge" ? "Alert acknowledged." : "Alert resolved.";
+        await loadAlerts();
+        await openAlertDetails(alertID);
+    } catch {
+        document.getElementById("alertDetailsMessage").textContent =
+            "Unable to update alert status.";
+    } finally {
+        acknowledgeButton.disabled = false;
+        resolveButton.disabled = false;
+    }
+}
+
+document.getElementById("refreshAlerts").addEventListener("click", loadAlerts);
+document.getElementById("applyAlertFilters").addEventListener("click", () => {
+    alertOffset = 0;
+    loadAlerts();
+});
+document.getElementById("clearAlertFilters").addEventListener("click", () => {
+    document.getElementById("alertStatusFilter").value = "";
+    alertOffset = 0;
+    loadAlerts();
+});
+previousAlertsPage.addEventListener("click", () => {
+    if (alertOffset >= ALERT_PAGE_SIZE) {
+        alertOffset -= ALERT_PAGE_SIZE;
+        loadAlerts();
+    }
+});
+nextAlertsPage.addEventListener("click", () => {
+    alertOffset += ALERT_PAGE_SIZE;
+    loadAlerts();
+});
+document.getElementById("acknowledgeAlert").addEventListener("click", () => {
+    updateAlertStatus("acknowledge");
+});
+document.getElementById("resolveAlert").addEventListener("click", () => {
+    updateAlertStatus("resolve");
+});
+document.getElementById("closeAlertDetails").addEventListener("click", () => {
+    document.getElementById("alertDetailsPanel").hidden = true;
+});
+
+
 loadWebsites();
 loadLogs();
+loadAlerts();
 </script>
 </body>
 </html>

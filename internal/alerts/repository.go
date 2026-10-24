@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/paragishere/secrust/internal/audit"
 )
 
 var (
@@ -222,11 +224,156 @@ func (r *Repository) List(
 	return result, nil
 }
 
+func (r *Repository) Get(
+	ctx context.Context,
+	organizationID, alertID string,
+) (Alert, error) {
+	var alert Alert
+	var detailsJSON string
+	var acknowledgedBy, resolvedBy sql.NullString
+	var acknowledgedAt, resolvedAt sql.NullString
+
+	if r == nil || r.db == nil ||
+		strings.TrimSpace(organizationID) == "" ||
+		strings.TrimSpace(alertID) == "" {
+		return Alert{}, ErrInvalidAlert
+	}
+
+	err := r.db.QueryRowContext(ctx, `
+		SELECT id, organization_id, website_id, severity, type,
+		       message, COALESCE(ip, ''), status, COALESCE(rule_key, ''),
+		       details, created_at, acknowledged_by,
+		       acknowledged_at, resolved_by, resolved_at
+		FROM alerts
+		WHERE organization_id = ? AND id = ?
+	`, organizationID, alertID).Scan(
+		&alert.ID,
+		&alert.OrganizationID,
+		&alert.WebsiteID,
+		&alert.Severity,
+		&alert.Type,
+		&alert.Message,
+		&alert.IP,
+		&alert.Status,
+		&alert.RuleKey,
+		&detailsJSON,
+		&alert.CreatedAt,
+		&acknowledgedBy,
+		&acknowledgedAt,
+		&resolvedBy,
+		&resolvedAt,
+	)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return Alert{}, ErrAlertNotFound
+	}
+	if err != nil {
+		return Alert{}, fmt.Errorf("get alert: %w", err)
+	}
+
+	if acknowledgedBy.Valid {
+		alert.AcknowledgedBy = acknowledgedBy.String
+	}
+	if acknowledgedAt.Valid {
+		alert.AcknowledgedAt = acknowledgedAt.String
+	}
+	if resolvedBy.Valid {
+		alert.ResolvedBy = resolvedBy.String
+	}
+	if resolvedAt.Valid {
+		alert.ResolvedAt = resolvedAt.String
+	}
+
+	alert.Details = make(map[string]any)
+	if detailsJSON != "" {
+		if err := json.Unmarshal([]byte(detailsJSON), &alert.Details); err != nil {
+			return Alert{}, fmt.Errorf("decode alert details: %w", err)
+		}
+	}
+
+	return alert, nil
+}
+
 func (r *Repository) SetStatus(
 	ctx context.Context,
 	organizationID, alertID, userID, newStatus string,
 ) error {
+	if r == nil || r.db == nil {
+		return ErrInvalidAlert
+	}
+
+	return r.setStatusWithExecutor(
+		ctx, r.db, organizationID, alertID, userID, newStatus,
+	)
+}
+
+func (r *Repository) SetStatusWithAudit(
+	ctx context.Context,
+	organizationID, alertID, userID, newStatus string,
+) error {
 	if r == nil || r.db == nil ||
+		strings.TrimSpace(organizationID) == "" ||
+		strings.TrimSpace(alertID) == "" ||
+		strings.TrimSpace(userID) == "" {
+		return ErrInvalidAlert
+	}
+
+	newStatus = strings.ToLower(strings.TrimSpace(newStatus))
+	if newStatus != "acknowledged" && newStatus != "resolved" {
+		return ErrInvalidAlert
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin alert status transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := r.setStatusWithExecutor(
+		ctx, tx, organizationID, alertID, userID, newStatus,
+	); err != nil {
+		return err
+	}
+
+	action := "alert.acknowledged"
+	if newStatus == "resolved" {
+		action = "alert.resolved"
+	}
+
+	if err := audit.RecordWithExecutor(ctx, tx, audit.Entry{
+		OrganizationID: organizationID,
+		UserID:         userID,
+		Action:         action,
+		ResourceType:   "alert",
+		ResourceID:     alertID,
+		Metadata: map[string]any{
+			"new_status": newStatus,
+		},
+	}); err != nil {
+		return fmt.Errorf("audit alert status change: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit alert status transaction: %w", err)
+	}
+
+	return nil
+}
+
+type alertStatusExecutor interface {
+	ExecContext(
+		ctx context.Context,
+		query string,
+		args ...any,
+	) (sql.Result, error)
+}
+
+func (r *Repository) setStatusWithExecutor(
+	ctx context.Context,
+	executor alertStatusExecutor,
+	organizationID, alertID, userID, newStatus string,
+) error {
+	if executor == nil ||
 		strings.TrimSpace(organizationID) == "" ||
 		strings.TrimSpace(alertID) == "" ||
 		strings.TrimSpace(userID) == "" {
@@ -244,7 +391,7 @@ func (r *Repository) SetStatus(
 	var err error
 
 	if newStatus == "acknowledged" {
-		result, err = r.db.ExecContext(ctx, `
+		result, err = executor.ExecContext(ctx, `
 			UPDATE alerts
 			SET status = 'acknowledged',
 			    acknowledged_by = ?,
@@ -254,7 +401,7 @@ func (r *Repository) SetStatus(
 			  AND status = 'open'
 		`, userID, now, alertID, organizationID)
 	} else {
-		result, err = r.db.ExecContext(ctx, `
+		result, err = executor.ExecContext(ctx, `
 			UPDATE alerts
 			SET status = 'resolved',
 			    resolved_by = ?,

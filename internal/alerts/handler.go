@@ -95,6 +95,48 @@ func (h *Handler) List(c *gin.Context) {
 	})
 }
 
+func (h *Handler) Get(c *gin.Context) {
+	organizationID, ok := c.Get("organizationID")
+	if !ok {
+		organizationID, ok = c.Get("organization_id")
+	}
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "organization context missing",
+		})
+		return
+	}
+
+	orgID, ok := organizationID.(string)
+	if !ok || strings.TrimSpace(orgID) == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "organization context missing",
+		})
+		return
+	}
+
+	alert, err := h.repo.Get(
+		c.Request.Context(),
+		orgID,
+		c.Param("alertID"),
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidAlert):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid alert"})
+		case errors.Is(err, ErrAlertNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "alert not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "failed to retrieve alert",
+			})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, alert)
+}
+
 // Acknowledge marks an open alert as acknowledged.
 func (h *Handler) Acknowledge(c *gin.Context) {
 	h.updateStatus(c, "acknowledged")
@@ -123,7 +165,7 @@ func (h *Handler) updateStatus(c *gin.Context, status string) {
 		return
 	}
 
-	err := h.repo.SetStatus(
+	err := h.repo.SetStatusWithAudit(
 		c.Request.Context(),
 		organizationID,
 		alertID,

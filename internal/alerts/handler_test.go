@@ -1,6 +1,7 @@
 package alerts
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -250,5 +251,84 @@ func TestAlertHandlerResolveSucceeds(t *testing.T) {
 	}
 	if updated[0].ResolvedBy != "user-a" {
 		t.Fatalf("expected resolved_by user-a, got %q", updated[0].ResolvedBy)
+	}
+}
+
+func TestAlertHandlerGetIsOrganizationScoped(t *testing.T) {
+	handler, repo := setupAlertHandlerTest(t)
+
+	ctx := context.Background()
+	created, err := repo.Create(ctx, CreateInput{
+		WebsiteID: "website-a",
+		Severity:  "high",
+		Type:      "test_alert",
+		Message:   "Alert details test",
+		IP:        "192.0.2.20",
+		RuleKey:   "test_rule",
+		Details:   map[string]any{"source": "test"},
+	})
+	if err != nil {
+		t.Fatalf("create alert: %v", err)
+	}
+
+	router := gin.New()
+	router.GET("/api/alerts/:alertID", func(c *gin.Context) {
+		c.Set("organizationID", "org-a")
+		c.Set("organization_id", "org-a")
+		handler.Get(c)
+	})
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/alerts/"+created.ID,
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	router = gin.New()
+	router.GET("/api/alerts/:alertID", func(c *gin.Context) {
+		c.Set("organizationID", "org-b")
+		c.Set("organization_id", "org-b")
+		handler.Get(c)
+	})
+
+	req = httptest.NewRequest(
+		http.MethodGet,
+		"/api/alerts/"+created.ID,
+		nil,
+	)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404 for another organization, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAlertHandlerGetNotFound(t *testing.T) {
+	handler, _ := setupAlertHandlerTest(t)
+
+	router := gin.New()
+	router.GET("/api/alerts/:alertID", func(c *gin.Context) {
+		c.Set("organizationID", "org-a")
+		c.Set("organization_id", "org-a")
+		handler.Get(c)
+	})
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/alerts/missing-alert",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

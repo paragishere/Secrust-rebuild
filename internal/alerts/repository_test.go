@@ -298,3 +298,67 @@ func TestHasRecentOpenAlertRejectsInvalidInput(t *testing.T) {
 		t.Fatal("expected error for empty website ID")
 	}
 }
+
+func TestGetAlertIsOrganizationScoped(t *testing.T) {
+	repo, ctx := setupAlertRepository(t)
+
+	created, err := repo.Create(ctx, CreateInput{
+		WebsiteID: "website-a",
+		Severity:  "high",
+		Type:      "test_alert",
+		Message:   "Test alert details",
+		IP:        "192.0.2.10",
+		RuleKey:   "test_rule",
+		Details:   map[string]any{"source": "test"},
+	})
+	if err != nil {
+		t.Fatalf("create alert: %v", err)
+	}
+
+	got, err := repo.Get(ctx, "org-a", created.ID)
+	if err != nil {
+		t.Fatalf("get alert: %v", err)
+	}
+	if got.ID != created.ID {
+		t.Fatalf("expected alert ID %q, got %q", created.ID, got.ID)
+	}
+	if got.OrganizationID != "org-a" {
+		t.Fatalf("expected organization org-a, got %q", got.OrganizationID)
+	}
+
+	_, err = repo.Get(ctx, "org-b", created.ID)
+	if !errors.Is(err, ErrAlertNotFound) {
+		t.Fatalf("expected ErrAlertNotFound for another organization, got %v", err)
+	}
+}
+
+func TestGetAlertNotFound(t *testing.T) {
+	repo, ctx := setupAlertRepository(t)
+
+	_, err := repo.Get(ctx, "org-a", "missing-alert")
+	if !errors.Is(err, ErrAlertNotFound) {
+		t.Fatalf("expected ErrAlertNotFound, got %v", err)
+	}
+}
+
+func TestGetAlertRejectsInvalidInput(t *testing.T) {
+	repo, ctx := setupAlertRepository(t)
+
+	tests := []struct {
+		name string
+		org  string
+		id   string
+	}{
+		{name: "missing organization", org: "", id: "alert-1"},
+		{name: "missing alert ID", org: "org-a", id: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := repo.Get(ctx, tt.org, tt.id)
+			if !errors.Is(err, ErrInvalidAlert) {
+				t.Fatalf("expected ErrInvalidAlert, got %v", err)
+			}
+		})
+	}
+}

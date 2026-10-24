@@ -33,11 +33,12 @@ func TestDetectorCreatesAndSuppressesHTTP5xxAlerts(t *testing.T) {
 	}
 
 	detector, err := NewDetector(repo, DetectorConfig{
-		Window:                 15 * time.Minute,
-		MinimumCount:           3,
-		BruteForceMinimumCount: 10,
-		NotFoundMinimumCount:   10,
-		SuppressFor:            30 * time.Minute,
+		Window:                  15 * time.Minute,
+		MinimumCount:            3,
+		BruteForceMinimumCount:  10,
+		NotFoundMinimumCount:    10,
+		SuppressFor:             30 * time.Minute,
+		RequestRateMinimumCount: 100,
 	})
 	if err != nil {
 		t.Fatalf("NewDetector() error: %v", err)
@@ -105,11 +106,12 @@ func TestDetectorCreatesAndSuppressesBruteForceAlerts(t *testing.T) {
 	}
 
 	detector, err := NewDetector(repo, DetectorConfig{
-		Window:                 15 * time.Minute,
-		MinimumCount:           3,
-		BruteForceMinimumCount: 3,
-		NotFoundMinimumCount:   10,
-		SuppressFor:            30 * time.Minute,
+		Window:                  15 * time.Minute,
+		MinimumCount:            3,
+		BruteForceMinimumCount:  3,
+		NotFoundMinimumCount:    10,
+		RequestRateMinimumCount: 100,
+		SuppressFor:             30 * time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("NewDetector() error: %v", err)
@@ -174,11 +176,12 @@ func TestDetectorDoesNotSuppressDifferentBruteForceIPs(t *testing.T) {
 	}
 
 	detector, err := NewDetector(repo, DetectorConfig{
-		Window:                 15 * time.Minute,
-		MinimumCount:           3,
-		BruteForceMinimumCount: 3,
-		NotFoundMinimumCount:   10,
-		SuppressFor:            30 * time.Minute,
+		Window:                  15 * time.Minute,
+		MinimumCount:            3,
+		BruteForceMinimumCount:  3,
+		NotFoundMinimumCount:    10,
+		RequestRateMinimumCount: 100,
+		SuppressFor:             30 * time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("NewDetector() error: %v", err)
@@ -266,11 +269,12 @@ func TestAuthenticationFailureIngestionCreatesBruteForceAlert(t *testing.T) {
 	}
 
 	detector, err := NewDetector(alertRepo, DetectorConfig{
-		Window:                 5 * time.Minute,
-		MinimumCount:           10,
-		BruteForceMinimumCount: 3,
-		NotFoundMinimumCount:   10,
-		SuppressFor:            30 * time.Minute,
+		Window:                  5 * time.Minute,
+		MinimumCount:            10,
+		BruteForceMinimumCount:  3,
+		NotFoundMinimumCount:    10,
+		RequestRateMinimumCount: 100,
+		SuppressFor:             30 * time.Minute,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -325,11 +329,12 @@ func TestDetectorCreatesAndSuppressesNotFoundAlerts(t *testing.T) {
 	}
 
 	detector, err := NewDetector(repo, DetectorConfig{
-		Window:                 10 * time.Minute,
-		MinimumCount:           3,
-		BruteForceMinimumCount: 3,
-		NotFoundMinimumCount:   10,
-		SuppressFor:            30 * time.Minute,
+		Window:                  10 * time.Minute,
+		MinimumCount:            3,
+		BruteForceMinimumCount:  3,
+		NotFoundMinimumCount:    10,
+		RequestRateMinimumCount: 100,
+		SuppressFor:             30 * time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("NewDetector() error: %v", err)
@@ -387,11 +392,12 @@ func TestDetectorDoesNotAlertBelowNotFoundThreshold(t *testing.T) {
 	}
 
 	detector, err := NewDetector(repo, DetectorConfig{
-		Window:                 10 * time.Minute,
-		MinimumCount:           3,
-		BruteForceMinimumCount: 3,
-		NotFoundMinimumCount:   10,
-		SuppressFor:            30 * time.Minute,
+		Window:                  10 * time.Minute,
+		MinimumCount:            3,
+		BruteForceMinimumCount:  3,
+		NotFoundMinimumCount:    10,
+		RequestRateMinimumCount: 100,
+		SuppressFor:             30 * time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("NewDetector() error: %v", err)
@@ -403,5 +409,106 @@ func TestDetectorDoesNotAlertBelowNotFoundThreshold(t *testing.T) {
 	}
 	if result.CandidatesFound != 0 || result.AlertsCreated != 0 {
 		t.Fatalf("expected no candidates or alerts below threshold, got %+v", result)
+	}
+}
+
+func TestDetectorCreatesAndSuppressesRequestRateAlerts(t *testing.T) {
+	repo, ctx := setupAlertRepository(t)
+	recent := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano)
+
+	for i := 0; i < 100; i++ {
+		_, err := repo.db.ExecContext(ctx, `
+			INSERT INTO logs (
+				id, website_id, ip, method, path, status,
+				event_type, severity, created_at
+			) VALUES (?, 'website-a', '192.0.2.91', 'GET', ?,
+				200, 'http_request', 'info', ?)
+		`, fmt.Sprintf("rate-test-%d", i),
+			fmt.Sprintf("/page-%d", i), recent)
+		if err != nil {
+			t.Fatalf("insert request log: %v", err)
+		}
+	}
+
+	detector, err := NewDetector(repo, DetectorConfig{
+		Window:                  10 * time.Minute,
+		MinimumCount:            3,
+		BruteForceMinimumCount:  3,
+		NotFoundMinimumCount:    10,
+		RequestRateMinimumCount: 100,
+		SuppressFor:             30 * time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("NewDetector() error: %v", err)
+	}
+
+	first, err := detector.RunRequestRateDetection(ctx)
+	if err != nil {
+		t.Fatalf("first request-rate detection: %v", err)
+	}
+	if first.CandidatesFound != 1 || first.AlertsCreated != 1 {
+		t.Fatalf("expected one candidate and one alert, got %+v", first)
+	}
+
+	second, err := detector.RunRequestRateDetection(ctx)
+	if err != nil {
+		t.Fatalf("second request-rate detection: %v", err)
+	}
+	if second.AlertsCreated != 0 || second.AlertsSuppressed != 1 {
+		t.Fatalf("expected duplicate suppression, got %+v", second)
+	}
+
+	alerts, err := repo.List(ctx, "org-a", "open", 50, 0)
+	if err != nil {
+		t.Fatalf("list alerts: %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("expected one open alert, got %d", len(alerts))
+	}
+	if alerts[0].RuleKey != RequestRateRuleKey {
+		t.Errorf("expected rule key %q, got %q",
+			RequestRateRuleKey, alerts[0].RuleKey)
+	}
+	if alerts[0].IP != "192.0.2.91" {
+		t.Errorf("expected source IP 192.0.2.91, got %q", alerts[0].IP)
+	}
+}
+
+func TestDetectorDoesNotAlertBelowRequestRateThreshold(t *testing.T) {
+	repo, ctx := setupAlertRepository(t)
+	recent := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano)
+
+	for i := 0; i < 99; i++ {
+		_, err := repo.db.ExecContext(ctx, `
+			INSERT INTO logs (
+				id, website_id, ip, method, path, status,
+				event_type, severity, created_at
+			) VALUES (?, 'website-a', '192.0.2.92', 'GET', ?,
+				200, 'http_request', 'info', ?)
+		`, fmt.Sprintf("rate-below-%d", i),
+			fmt.Sprintf("/page-%d", i), recent)
+		if err != nil {
+			t.Fatalf("insert request log: %v", err)
+		}
+	}
+
+	detector, err := NewDetector(repo, DetectorConfig{
+		Window:                  10 * time.Minute,
+		MinimumCount:            3,
+		BruteForceMinimumCount:  3,
+		NotFoundMinimumCount:    10,
+		RequestRateMinimumCount: 100,
+		SuppressFor:             30 * time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("NewDetector() error: %v", err)
+	}
+
+	result, err := detector.RunRequestRateDetection(ctx)
+	if err != nil {
+		t.Fatalf("request-rate detection: %v", err)
+	}
+	if result.CandidatesFound != 0 || result.AlertsCreated != 0 {
+		t.Fatalf("expected no alert below threshold, got %+v", result)
 	}
 }

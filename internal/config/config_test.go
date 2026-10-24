@@ -46,6 +46,10 @@ func TestLoadDetectionDefaults(t *testing.T) {
 	if cfg.DetectionSuppressFor != 30*time.Minute {
 		t.Errorf("expected 30m suppression, got %s", cfg.DetectionSuppressFor)
 	}
+	if cfg.DetectionMinRequestsPerIP != 100 {
+		t.Errorf("expected 100 minimum requests per IP, got %d",
+			cfg.DetectionMinRequestsPerIP)
+	}
 }
 
 func TestLoadRejectsInvalidDetectionConfig(t *testing.T) {
@@ -68,6 +72,9 @@ func TestLoadRejectsInvalidDetectionConfig(t *testing.T) {
 		{"negative 404 minimum", "DETECTION_MIN_NOT_FOUND", "-1"},
 		{"invalid suppression", "DETECTION_SUPPRESS_FOR", "abc"},
 		{"zero suppression", "DETECTION_SUPPRESS_FOR", "0s"},
+		{"invalid requests-per-IP minimum", "DETECTION_MIN_REQUESTS_PER_IP", "abc"},
+		{"zero requests-per-IP minimum", "DETECTION_MIN_REQUESTS_PER_IP", "0"},
+		{"negative requests-per-IP minimum", "DETECTION_MIN_REQUESTS_PER_IP", "-1"},
 	}
 
 	for _, tt := range tests {
@@ -90,6 +97,7 @@ func TestLoadAcceptsCustomDetectionConfig(t *testing.T) {
 	t.Setenv("DETECTION_MIN_AUTH_FAILURES", "5")
 	t.Setenv("DETECTION_SUPPRESS_FOR", "45m")
 	t.Setenv("DETECTION_MIN_NOT_FOUND", "5")
+	t.Setenv("DETECTION_MIN_REQUESTS_PER_IP", "50")
 
 	cfg, err := Load()
 	if err != nil {

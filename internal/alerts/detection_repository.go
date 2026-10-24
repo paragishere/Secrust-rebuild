@@ -204,3 +204,74 @@ func (r *Repository) FindNotFoundCandidates(
 
 	return candidates, nil
 }
+
+type RequestRateCandidate struct {
+	OrganizationID string
+	WebsiteID      string
+	IP             string
+	RequestCount   int
+	FirstSeen      string
+	LastSeen       string
+}
+
+// FindRequestRateCandidates finds IPs exceeding the request threshold
+// for active websites within the supplied time window.
+func (r *Repository) FindRequestRateCandidates(
+	ctx context.Context,
+	since time.Time,
+	minimumCount int,
+) ([]RequestRateCandidate, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("alert repository is not initialized")
+	}
+	if minimumCount < 1 {
+		return nil, fmt.Errorf("minimum count must be positive")
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT
+			w.organization_id,
+			l.website_id,
+			trim(l.ip),
+			COUNT(*),
+			MIN(l.created_at),
+			MAX(l.created_at)
+		FROM logs l
+		JOIN websites w ON w.id = l.website_id
+		WHERE w.status = 'active'
+		  AND l.ip IS NOT NULL
+		  AND trim(l.ip) <> ''
+		  AND l.created_at >= ?
+		GROUP BY w.organization_id, l.website_id, trim(l.ip)
+		HAVING COUNT(*) >= ?
+		ORDER BY COUNT(*) DESC, l.website_id ASC, trim(l.ip) ASC
+	`, since.UTC().Format(time.RFC3339Nano), minimumCount)
+	if err != nil {
+		return nil, fmt.Errorf("find request-rate candidates: %w", err)
+	}
+	defer rows.Close()
+
+	candidates := make([]RequestRateCandidate, 0)
+
+	for rows.Next() {
+		var candidate RequestRateCandidate
+		if err := rows.Scan(
+			&candidate.OrganizationID,
+			&candidate.WebsiteID,
+			&candidate.IP,
+			&candidate.RequestCount,
+			&candidate.FirstSeen,
+			&candidate.LastSeen,
+		); err != nil {
+			return nil, fmt.Errorf("scan request-rate candidate: %w", err)
+		}
+
+		candidates = append(candidates, candidate)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate request-rate candidates: %w", err)
+	}
+
+	return candidates, nil
+}

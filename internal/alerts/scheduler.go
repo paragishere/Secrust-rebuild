@@ -107,4 +107,25 @@ func (s *Scheduler) runDetection(ctx context.Context) {
 		"created", bruteForceResult.AlertsCreated,
 		"suppressed", bruteForceResult.AlertsSuppressed,
 	)
+
+	if ctx.Err() != nil {
+		return
+	}
+
+	requestRateResult, err := s.detector.RunRequestRateDetection(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		s.logger.Error("request-rate detection failed", "error", err)
+		return
+	}
+
+	s.logger.Info(
+		"request-rate detection completed",
+		"candidates", requestRateResult.CandidatesFound,
+		"created", requestRateResult.AlertsCreated,
+		"suppressed", requestRateResult.AlertsSuppressed,
+	)
+
 }

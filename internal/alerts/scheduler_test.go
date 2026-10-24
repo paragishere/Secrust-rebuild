@@ -57,12 +57,28 @@ func TestSchedulerRunsAllDetectionRules(t *testing.T) {
 		}
 	}
 
+	// Insert 100 requests from one IP to trigger request-rate detection.
+	for i := 0; i < 100; i++ {
+		_, err := repo.db.ExecContext(ctx, `
+			INSERT INTO logs (
+				id, website_id, ip, method, path, status,
+				event_type, severity, created_at
+			) VALUES (?, 'website-a', '192.0.2.90', 'GET', ?,
+				200, 'http_request', 'info', ?)
+		`, fmt.Sprintf("scheduler-rate-%d", i),
+			fmt.Sprintf("/page-%d", i), recent)
+		if err != nil {
+			t.Fatalf("insert request-rate log: %v", err)
+		}
+	}
+
 	detector, err := NewDetector(repo, DetectorConfig{
-		Window:                 10 * time.Minute,
-		MinimumCount:           3,
-		BruteForceMinimumCount: 3,
-		NotFoundMinimumCount:   10,
-		SuppressFor:            30 * time.Minute,
+		Window:                  10 * time.Minute,
+		MinimumCount:            3,
+		BruteForceMinimumCount:  3,
+		NotFoundMinimumCount:    10,
+		SuppressFor:             30 * time.Minute,
+		RequestRateMinimumCount: 100,
 	})
 	if err != nil {
 		t.Fatalf("NewDetector() error: %v", err)
@@ -86,13 +102,16 @@ func TestSchedulerRunsAllDetectionRules(t *testing.T) {
 	if !foundRules[HTTP5xxSpikeRuleKey] {
 		t.Error("expected HTTP 5xx spike alert")
 	}
-	if len(alerts) != 3 {
-		t.Fatalf("expected 3 alerts from scheduler, got %d: %+v", len(alerts), alerts)
+	if len(alerts) != 4 {
+		t.Fatalf("expected 4 alerts from scheduler, got %d: %+v", len(alerts), alerts)
 	}
 	if !foundRules[BruteForceRuleKey] {
 		t.Error("expected brute-force alert")
 	}
 	if !foundRules[NotFoundRuleKey] {
 		t.Error("expected HTTP 404 spike alert")
+	}
+	if !foundRules[RequestRateRuleKey] {
+		t.Error("expected request-rate alert")
 	}
 }

@@ -58,11 +58,12 @@ func run(logger *slog.Logger) error {
 	alertRepo := alerts.NewRepository(db)
 
 	detector, err := alerts.NewDetector(alertRepo, alerts.DetectorConfig{
-		Window:                 cfg.DetectionWindow,
-		MinimumCount:           cfg.DetectionMinErrors,
-		BruteForceMinimumCount: cfg.DetectionMinAuthFailures,
-		NotFoundMinimumCount:   cfg.DetectionMinNotFound,
-		SuppressFor:            cfg.DetectionSuppressFor,
+		Window:                  cfg.DetectionWindow,
+		MinimumCount:            cfg.DetectionMinErrors,
+		BruteForceMinimumCount:  cfg.DetectionMinAuthFailures,
+		NotFoundMinimumCount:    cfg.DetectionMinNotFound,
+		SuppressFor:             cfg.DetectionSuppressFor,
+		RequestRateMinimumCount: cfg.DetectionMinRequestsPerIP,
 	})
 	if err != nil {
 		return err

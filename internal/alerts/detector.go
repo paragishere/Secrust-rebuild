@@ -9,11 +9,12 @@ import (
 const HTTP5xxSpikeRuleKey = "http.5xx_spike"
 
 type DetectorConfig struct {
-	Window                 time.Duration
-	MinimumCount           int
-	BruteForceMinimumCount int
-	SuppressFor            time.Duration
-	NotFoundMinimumCount   int
+	Window                  time.Duration
+	MinimumCount            int
+	BruteForceMinimumCount  int
+	SuppressFor             time.Duration
+	NotFoundMinimumCount    int
+	RequestRateMinimumCount int
 }
 
 type Detector struct {
@@ -42,6 +43,9 @@ func NewDetector(repo *Repository, config DetectorConfig) (*Detector, error) {
 	}
 	if config.SuppressFor <= 0 {
 		return nil, fmt.Errorf("suppression duration must be positive")
+	}
+	if config.RequestRateMinimumCount < 1 {
+		return nil, fmt.Errorf("request-rate minimum count must be positive")
 	}
 	if config.NotFoundMinimumCount < 1 {
 		return nil, fmt.Errorf("404 minimum count must be positive")
@@ -266,6 +270,80 @@ func (d *Detector) RunNotFoundDetection(
 			return result, fmt.Errorf(
 				"create HTTP 404 alert for website %s: %w",
 				candidate.WebsiteID, err,
+			)
+		}
+
+		result.AlertsCreated++
+	}
+
+	return result, nil
+}
+
+const RequestRateRuleKey = "http.request_rate"
+
+func (d *Detector) RunRequestRateDetection(
+	ctx context.Context,
+) (DetectionResult, error) {
+	if d == nil || d.repo == nil {
+		return DetectionResult{}, fmt.Errorf("detector is not initialized")
+	}
+
+	now := time.Now().UTC()
+	candidates, err := d.repo.FindRequestRateCandidates(
+		ctx,
+		now.Add(-d.config.Window),
+		d.config.RequestRateMinimumCount,
+	)
+	if err != nil {
+		return DetectionResult{}, fmt.Errorf("query request-rate candidates: %w", err)
+	}
+
+	result := DetectionResult{CandidatesFound: len(candidates)}
+
+	for _, candidate := range candidates {
+		since := now.Add(-d.config.SuppressFor)
+
+		exists, err := d.repo.HasRecentOpenAlertForIP(
+			ctx,
+			candidate.WebsiteID,
+			RequestRateRuleKey,
+			candidate.IP,
+			since,
+		)
+		if err != nil {
+			return result, fmt.Errorf(
+				"check duplicate request-rate alert for website %s and IP %s: %w",
+				candidate.WebsiteID, candidate.IP, err,
+			)
+		}
+
+		if exists {
+			result.AlertsSuppressed++
+			continue
+		}
+
+		_, err = d.repo.Create(ctx, CreateInput{
+			WebsiteID: candidate.WebsiteID,
+			Severity:  "medium",
+			Type:      "high_request_rate",
+			Message: fmt.Sprintf(
+				"Detected %d requests from IP %s within the configured detection window",
+				candidate.RequestCount, candidate.IP,
+			),
+			IP:      candidate.IP,
+			RuleKey: RequestRateRuleKey,
+			Details: map[string]any{
+				"request_count": candidate.RequestCount,
+				"source_ip":     candidate.IP,
+				"window":        d.config.Window.String(),
+				"first_seen":    candidate.FirstSeen,
+				"last_seen":     candidate.LastSeen,
+			},
+		})
+		if err != nil {
+			return result, fmt.Errorf(
+				"create request-rate alert for website %s and IP %s: %w",
+				candidate.WebsiteID, candidate.IP, err,
 			)
 		}
 

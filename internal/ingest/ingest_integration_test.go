@@ -48,7 +48,7 @@ func TestIngestHTTPIntegration(t *testing.T) {
 		"path":       "/login",
 		"status":     401,
 		"user_agent": "IntegrationTest/1.0",
-		"event_type": "authentication_failure",
+		"event_type": "auth_failure",
 		"severity":   "medium",
 	}
 
@@ -69,6 +69,27 @@ func TestIngestHTTPIntegration(t *testing.T) {
 		if count != 1 {
 			t.Fatalf("expected one stored log, got %d", count)
 		}
+
+		var eventType, sourceIP string
+		err = repo.db.QueryRowContext(
+			context.Background(),
+			`SELECT event_type, ip
+			 FROM logs
+			 WHERE website_id = 'website-a'
+			 ORDER BY created_at DESC, id DESC
+			 LIMIT 1`,
+		).Scan(&eventType, &sourceIP)
+		if err != nil {
+			t.Fatalf("read stored authentication event: %v", err)
+		}
+
+		if eventType != "auth_failure" {
+			t.Fatalf("expected event_type auth_failure, got %q", eventType)
+		}
+		if sourceIP != "192.0.2.10" {
+			t.Fatalf("expected source IP 192.0.2.10, got %q", sourceIP)
+		}
+
 	})
 
 	t.Run("missing key rejected", func(t *testing.T) {

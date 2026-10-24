@@ -35,7 +35,7 @@ func TestIngestHandlerAcceptsValidLog(t *testing.T) {
 		"path":       "/login",
 		"status":     401,
 		"user_agent": "TestAgent/1.0",
-		"event_type": "authentication_failure",
+		"event_type": "auth_failure",
 		"severity":   "medium",
 	}
 

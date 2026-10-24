@@ -1,6 +1,7 @@
 package alerts
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -72,5 +73,121 @@ func TestNewDetectorRejectsInvalidConfiguration(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected invalid window to be rejected")
+	}
+}
+
+func TestDetectorCreatesAndSuppressesBruteForceAlerts(t *testing.T) {
+	repo, ctx := setupAlertRepository(t)
+
+	now := time.Now().UTC()
+	recent := now.Add(-2 * time.Minute).Format(time.RFC3339Nano)
+
+	// Three authentication failures from the same IP.
+	for i := 0; i < 3; i++ {
+		_, err := repo.db.ExecContext(ctx, `
+			INSERT INTO logs (
+				id, website_id, ip, method, path, status,
+				event_type, severity, created_at
+			) VALUES (?, 'website-a', '192.0.2.10', 'POST', '/login',
+				401, 'auth_failure', 'low', ?)
+		`, "brute-force-log-"+string(rune('a'+i)), recent)
+		if err != nil {
+			t.Fatalf("insert authentication failure: %v", err)
+		}
+	}
+
+	detector, err := NewDetector(repo, DetectorConfig{
+		Window:                 15 * time.Minute,
+		MinimumCount:           3,
+		BruteForceMinimumCount: 3,
+		SuppressFor:            30 * time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("NewDetector() error: %v", err)
+	}
+
+	first, err := detector.RunBruteForceDetection(ctx)
+	if err != nil {
+		t.Fatalf("first brute-force detection: %v", err)
+	}
+	if first.CandidatesFound != 1 || first.AlertsCreated != 1 {
+		t.Fatalf("unexpected first detection result: %+v", first)
+	}
+
+	second, err := detector.RunBruteForceDetection(ctx)
+	if err != nil {
+		t.Fatalf("second brute-force detection: %v", err)
+	}
+	if second.AlertsCreated != 0 || second.AlertsSuppressed != 1 {
+		t.Fatalf("expected duplicate suppression, got %+v", second)
+	}
+
+	alerts, err := repo.List(ctx, "org-a", "open", 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("expected one open alert, got %d", len(alerts))
+	}
+
+	alert := alerts[0]
+	if alert.RuleKey != BruteForceRuleKey {
+		t.Errorf("expected rule key %q, got %q", BruteForceRuleKey, alert.RuleKey)
+	}
+	if alert.IP != "192.0.2.10" {
+		t.Errorf("expected source IP 192.0.2.10, got %q", alert.IP)
+	}
+	if alert.Type != "brute_force" {
+		t.Errorf("expected type brute_force, got %q", alert.Type)
+	}
+}
+
+func TestDetectorDoesNotSuppressDifferentBruteForceIPs(t *testing.T) {
+	repo, ctx := setupAlertRepository(t)
+
+	now := time.Now().UTC()
+	recent := now.Add(-time.Minute).Format(time.RFC3339Nano)
+
+	for i, ip := range []string{"192.0.2.10", "192.0.2.20"} {
+		for j := 0; j < 3; j++ {
+			id := fmt.Sprintf("different-ip-%d-%d", i, j)
+			_, err := repo.db.ExecContext(ctx, `
+				INSERT INTO logs (
+					id, website_id, ip, method, path, status,
+					event_type, severity, created_at
+				) VALUES (?, 'website-a', ?, 'POST', '/login',
+					401, 'auth_failure', 'low', ?)
+			`, id, ip, recent)
+			if err != nil {
+				t.Fatalf("insert authentication failure: %v", err)
+			}
+		}
+	}
+
+	detector, err := NewDetector(repo, DetectorConfig{
+		Window:                 15 * time.Minute,
+		MinimumCount:           3,
+		BruteForceMinimumCount: 3,
+		SuppressFor:            30 * time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("NewDetector() error: %v", err)
+	}
+
+	result, err := detector.RunBruteForceDetection(ctx)
+	if err != nil {
+		t.Fatalf("RunBruteForceDetection() error: %v", err)
+	}
+
+	if result.CandidatesFound != 2 || result.AlertsCreated != 2 {
+		t.Fatalf("expected two independently created alerts, got %+v", result)
+	}
+
+	alerts, err := repo.List(ctx, "org-a", "open", 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(alerts) != 2 {
+		t.Fatalf("expected two open alerts, got %d", len(alerts))
 	}
 }

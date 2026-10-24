@@ -1,9 +1,16 @@
 package alerts
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/paragishere/secrust/internal/ingest"
 )
 
 func TestDetectorCreatesAndSuppressesHTTP5xxAlerts(t *testing.T) {
@@ -189,5 +196,107 @@ func TestDetectorDoesNotSuppressDifferentBruteForceIPs(t *testing.T) {
 	}
 	if len(alerts) != 2 {
 		t.Fatalf("expected two open alerts, got %d", len(alerts))
+	}
+}
+
+func TestAuthenticationFailureIngestionCreatesBruteForceAlert(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	alertRepo, ctx := setupAlertRepository(t)
+
+	ingestRepo := ingest.NewRepository(alertRepo.db)
+	ingestHandler := ingest.NewHandler(ingestRepo)
+
+	router := gin.New()
+	router.POST("/api/logs", func(c *gin.Context) {
+		c.Set(ingest.ContextWebsiteID, "website-a")
+		c.Next()
+	}, ingestHandler.Ingest)
+
+	// Send three authentication failures through the ingestion HTTP handler.
+	for i := 0; i < 3; i++ {
+		payload := map[string]any{
+			"ip":         "192.0.2.99",
+			"method":     "POST",
+			"path":       "/login",
+			"status":     401,
+			"user_agent": "IntegrationTest/1.0",
+			"event_type": "auth_failure",
+			"severity":   "low",
+		}
+
+		body, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		req := httptest.NewRequest(
+			http.MethodPost,
+			"/api/logs",
+			bytes.NewReader(body),
+		)
+		req.Header.Set("Content-Type", "application/json")
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("ingestion %d: expected 201, got %d: %s",
+				i+1, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Confirm that ingestion stored the expected event type and source IP.
+	var storedCount int
+	err := alertRepo.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM logs
+		WHERE website_id = 'website-a'
+		  AND event_type = 'auth_failure'
+		  AND ip = '192.0.2.99'
+	`).Scan(&storedCount)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storedCount != 3 {
+		t.Fatalf("expected 3 stored failures, got %d", storedCount)
+	}
+
+	detector, err := NewDetector(alertRepo, DetectorConfig{
+		Window:                 5 * time.Minute,
+		MinimumCount:           10,
+		BruteForceMinimumCount: 3,
+		SuppressFor:            30 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := detector.RunBruteForceDetection(ctx)
+	if err != nil {
+		t.Fatalf("brute-force detection: %v", err)
+	}
+	if result.CandidatesFound != 1 || result.AlertsCreated != 1 {
+		t.Fatalf("expected one brute-force alert, got %+v", result)
+	}
+
+	alerts, err := alertRepo.List(ctx, "org-a", "open", 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("expected one open alert, got %d", len(alerts))
+	}
+
+	alert := alerts[0]
+	if alert.RuleKey != BruteForceRuleKey {
+		t.Errorf("expected rule key %q, got %q",
+			BruteForceRuleKey, alert.RuleKey)
+	}
+	if alert.IP != "192.0.2.99" {
+		t.Errorf("expected source IP 192.0.2.99, got %q", alert.IP)
+	}
+	if alert.Type != "brute_force" {
+		t.Errorf("expected type brute_force, got %q", alert.Type)
 	}
 }

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{.CSRFToken}}">
+    <title>Organization Management | Secrust</title>
+    <link rel="stylesheet" href="/static/css/organization.css">
+    <script src="/static/js/organization.js" defer></script>
+</head>
+<body>
+<div class="org-shell">
+    <header class="org-header">
+        <div>
+            <a class="brand" href="/dashboard">SECRUST<span class="brand-dot">.</span></a>
+            <p class="eyebrow">SECURITY OPERATIONS</p>
+        </div>
+        <nav class="header-actions" aria-label="Page navigation">
+            <span class="live-indicator"><span></span> Organization workspace</span>
+            <a class="back-link" href="/dashboard">← Dashboard</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="page-heading">
+            <div>
+                <p class="eyebrow">IDENTITY · ACCESS · GOVERNANCE</p>
+                <h1>Organization <span>Management</span></h1>
+                <p class="muted">Manage members and invitations for your organization from one place.</p>
+            </div>
+            <button type="button" class="button button-secondary" id="refreshButton">
+                <span aria-hidden="true">↻</span> Refresh data
+            </button>
+        </section>
+
+        <div id="pageMessage" class="message" role="status" aria-live="polite" hidden></div>
+
+        <section class="stats-grid" aria-label="Organization summary">
+            <article class="stat-card">
+                <div class="stat-icon">◎</div>
+                <div><p class="stat-label">Organization members</p><strong id="memberStat">—</strong></div>
+            </article>
+            <article class="stat-card">
+                <div class="stat-icon amber">✉</div>
+                <div><p class="stat-label">Pending invitations</p><strong id="pendingStat">—</strong></div>
+            </article>
+            <article class="stat-card">
+                <div class="stat-icon green">✓</div>
+                <div><p class="stat-label">Accepted invitations</p><strong id="acceptedStat">—</strong></div>
+            </article>
+        </section>
+
+        <section class="panel">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">ACCESS DIRECTORY</p>
+                    <h2>Organization Members</h2>
+                    <p class="muted">Accounts currently associated with your organization.</p>
+                </div>
+                <span class="count" id="memberCount">0 members</span>
+            </div>
+            <div class="toolbar">
+                <label class="search-field">
+                    <span aria-hidden="true">⌕</span>
+                    <input type="search" id="memberSearch" placeholder="Search email, role or member ID…" autocomplete="off">
+                </label>
+                <select id="roleFilter" aria-label="Filter members by role">
+                    <option value="">All roles</option>
+                    <option value="SUPER_ADMIN">Super Admin</option>
+                    <option value="MANAGER">Manager</option>
+                    <option value="ANALYST">Analyst</option>
+                    <option value="VIEWER">Viewer</option>
+                </select>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Member</th><th>Role</th><th>Member ID</th></tr></thead>
+                    <tbody id="membersTable"><tr><td colspan="3" class="empty">Loading members…</td></tr></tbody>
+                </table>
+            </div>
+            <p class="muted small" id="membersMessage" aria-live="polite"></p>
+        </section>
+
+        <section class="panel" id="invitePanel">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">TEAM ONBOARDING</p>
+                    <h2>Invite a Member</h2>
+                    <p class="muted">Send a secure, time-limited invitation by email.</p>
+                </div>
+                <span class="permission-chip">Super Admin only</span>
+            </div>
+            <form id="inviteForm">
+                <div class="form-grid">
+                    <label>Email address
+                        <input type="email" id="inviteEmail" name="email" placeholder="person@example.com" required maxlength="254" autocomplete="email">
+                    </label>
+                    <label>Organization role
+                        <select id="inviteRole" name="role" required>
+                            <option value="ANALYST">Analyst</option>
+                            <option value="VIEWER">Viewer</option>
+                            <option value="MANAGER">Manager</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button class="button button-primary" id="sendInviteButton" type="submit">Send invitation <span aria-hidden="true">→</span></button>
+                    <span class="muted small">Invitation expiry is controlled by the server.</span>
+                </div>
+            </form>
+            <p id="inviteMessage" class="message" role="status" aria-live="polite" hidden></p>
+        </section>
+
+        <section class="panel" id="invitationsPanel">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">INVITATION AUDIT</p>
+                    <h2>Invitations</h2>
+                    <p class="muted">Track pending, accepted, expired and revoked invitations.</p>
+                </div>
+                <span class="count" id="invitationCount">0 invitations</span>
+            </div>
+            <div class="toolbar">
+                <label class="search-field">
+                    <span aria-hidden="true">⌕</span>
+                    <input type="search" id="invitationSearch" placeholder="Search invitations by email…" autocomplete="off">
+                </label>
+                <select id="invitationStatusFilter" aria-label="Filter invitations by status">
+                    <option value="">All statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Accepted">Accepted</option>
+                    <option value="Expired">Expired</option>
+                    <option value="Revoked">Revoked</option>
+                </select>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Expires</th><th>Actions</th></tr></thead>
+                    <tbody id="invitationsTable"><tr><td colspan="5" class="empty">Loading invitations…</td></tr></tbody>
+                </table>
+            </div>
+            <p id="invitationsMessage" class="muted small" aria-live="polite"></p>
+        </section>
+    </main>
+
+    <footer class="org-footer"><span>SECRUST WEB SHIELD</span><span>Organization Access Control · Protected workspace</span></footer>
+</div>
+</body>
+</html>

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -36,9 +35,11 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
+	// Load .env before reading application configuration.
 	if err := godotenv.Load(); err != nil {
-		log.Printf("No .env file loaded; using existing environment variables")
+		logger.Warn("No .env file loaded; using existing environment variables")
 	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -60,7 +61,6 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	// Initialize the alert detection engine.
 	alertRepo := alerts.NewRepository(db)
 
 	detector, err := alerts.NewDetector(alertRepo, alerts.DetectorConfig{
@@ -100,14 +100,24 @@ func run(logger *slog.Logger) error {
 	protected.GET("/dashboard", func(c *gin.Context) {
 		csrfToken, err := authHandler.NewDashboardCSRFToken(c)
 		if err != nil {
-			c.String(
-				http.StatusInternalServerError,
-				"Unable to prepare dashboard",
-			)
+			c.String(http.StatusInternalServerError, "Unable to prepare dashboard")
 			return
 		}
 
 		c.HTML(http.StatusOK, "dashboard.html", gin.H{
+			"Name":      c.GetString("userID"),
+			"CSRFToken": csrfToken,
+		})
+	})
+
+	protected.GET("/organization", func(c *gin.Context) {
+		csrfToken, err := authHandler.NewDashboardCSRFToken(c)
+		if err != nil {
+			c.String(http.StatusInternalServerError, "Unable to prepare organization page")
+			return
+		}
+
+		c.HTML(http.StatusOK, "members.html", gin.H{
 			"Name":      c.GetString("userID"),
 			"CSRFToken": csrfToken,
 		})
@@ -125,7 +135,6 @@ func run(logger *slog.Logger) error {
 	websiteHandler := website.NewHandler(websiteService)
 	websiteHandler.RegisterRoutes(router, authHandler)
 
-	// Log ingestion: authenticated with a website API key.
 	ingestRepo := ingest.NewRepository(db)
 	ingestHandler := ingest.NewHandler(ingestRepo)
 
@@ -133,14 +142,10 @@ func run(logger *slog.Logger) error {
 	ingestRoutes.Use(ingest.APIKeyAuth(ingestRepo))
 	ingestRoutes.POST("/logs", ingestHandler.Ingest)
 
-	// Alert API: organization-scoped access with RBAC.
-
 	alertHandler := alerts.NewHandler(alertRepo)
-
 	alertRoutes := router.Group("/api/alerts")
 	alertRoutes.Use(authHandler.RequireAuth())
 
-	// All authenticated roles can view alerts in their own organization.
 	alertRoutes.GET(
 		"",
 		auth.RequireRoles(
@@ -152,7 +157,6 @@ func run(logger *slog.Logger) error {
 		alertHandler.List,
 	)
 
-	// Only privileged operational roles can change alert status.
 	alertRoutes.PATCH(
 		"/:alertID/acknowledge",
 		auth.RequireRoles(
@@ -175,7 +179,6 @@ func run(logger *slog.Logger) error {
 		alertHandler.Resolve,
 	)
 
-	// Log Explorer API: authenticated with a user session and RBAC.
 	router.GET(
 		"/api/logs",
 		authHandler.RequireAuth(),
@@ -192,19 +195,22 @@ func run(logger *slog.Logger) error {
 	organizationService := organization.NewService(organizationRepo)
 
 	invitationRepo := organization.NewInvitationRepository(db)
+
 	invitationMailer := mailer.New(mailer.SMTPConfig{
-		Host:     cfg.SMTPHost,
-		Port:     cfg.SMTPPort,
-		Username: cfg.SMTPUsername,
-		Password: cfg.SMTPPassword,
-		From:     cfg.SMTPFrom,
+		Host:           cfg.SMTPHost,
+		Port:           cfg.SMTPPort,
+		Username:       cfg.SMTPUsername,
+		Password:       cfg.SMTPPassword,
+		From:           cfg.SMTPFrom,
+		AllowLocalHTTP: cfg.Environment == "development",
 	})
 
-	invitationService := organization.NewInvitationService(
+	invitationService := organization.NewInvitationServiceWithEnvironment(
 		invitationRepo,
 		invitationMailer,
 		cfg.AppBaseURL,
 		72*time.Hour,
+		cfg.Environment,
 	)
 
 	organizationHandler := organization.NewHandlerWithInvitations(
@@ -212,14 +218,15 @@ func run(logger *slog.Logger) error {
 		invitationService,
 	)
 	organizationHandler.RegisterRoutes(router, authHandler)
+
 	acceptanceHandler := organization.NewInvitationAcceptanceHandler(
 		invitationService,
 	)
 	acceptanceHandler.RegisterRoutes(router, authHandler)
 
-	// Website assignment with atomic audit logging.
 	assignmentRepo := website.NewAssignmentRepository(db)
 	auditRepo := audit.NewRepository(db)
+
 	assignmentService := website.NewAssignmentServiceWithAudit(
 		db,
 		assignmentRepo,
@@ -257,9 +264,7 @@ func run(logger *slog.Logger) error {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-		})
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	server := &http.Server{
@@ -269,7 +274,6 @@ func run(logger *slog.Logger) error {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	// Start the detector and retain its completion signal for shutdown.
 	schedulerCtx, cancelScheduler := context.WithCancel(context.Background())
 	schedulerDone := make(chan struct{})
 
@@ -312,7 +316,6 @@ func run(logger *slog.Logger) error {
 		logger.Info("shutdown signal received")
 	}
 
-	// Stop background detection before the database is closed.
 	cancelScheduler()
 
 	shutdownCtx, cancelShutdown := context.WithTimeout(

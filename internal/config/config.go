@@ -37,7 +37,7 @@ func Load() (Config, error) {
 		SMTPHost:      getEnv("SMTP_HOST", ""),
 		SMTPPort:      getEnv("SMTP_PORT", "587"),
 		SMTPUsername:  strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
-		SMTPPassword:  os.Getenv("SMTP_PASSWORD"),
+		SMTPPassword:  strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
 		SMTPFrom:      strings.TrimSpace(os.Getenv("SMTP_FROM")),
 		AppBaseURL:    strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/"),
 	}
@@ -84,15 +84,16 @@ func Load() (Config, error) {
 	if err != nil || minErrors < 1 {
 		return Config{}, errors.New("DETECTION_MIN_ERRORS must be a positive integer")
 	}
+
 	minAuthFailures, err := strconv.Atoi(
 		getEnv("DETECTION_MIN_AUTH_FAILURES", "10"),
 	)
-
 	if err != nil || minAuthFailures < 1 {
 		return Config{}, errors.New(
 			"DETECTION_MIN_AUTH_FAILURES must be a positive integer",
 		)
 	}
+
 	minNotFound, err := strconv.Atoi(
 		getEnv("DETECTION_MIN_NOT_FOUND", "10"),
 	)
@@ -101,6 +102,7 @@ func Load() (Config, error) {
 			"DETECTION_MIN_NOT_FOUND must be a positive integer",
 		)
 	}
+
 	minRequestsPerIP, err := strconv.Atoi(
 		getEnv("DETECTION_MIN_REQUESTS_PER_IP", "100"),
 	)
@@ -109,6 +111,7 @@ func Load() (Config, error) {
 			"DETECTION_MIN_REQUESTS_PER_IP must be a positive integer",
 		)
 	}
+
 	cfg.DetectionInterval = interval
 	cfg.DetectionWindow = window
 	cfg.DetectionMinErrors = minErrors

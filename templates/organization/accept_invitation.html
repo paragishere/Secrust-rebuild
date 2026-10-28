@@ -1,0 +1,127 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Accept Invitation | Secrust</title>
+    <link rel="stylesheet" href="/static/css/organization.css">
+    <style>
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: grid;
+            place-items: center;
+            background: #080d16;
+            color: #e5edf8;
+            font-family: Arial, sans-serif;
+        }
+        .accept-card {
+            width: min(440px, calc(100% - 40px));
+            box-sizing: border-box;
+            padding: 28px;
+            border: 1px solid #26364b;
+            border-radius: 14px;
+            background: #111a28;
+        }
+        h1 { font-size: 24px; }
+        p { color: #a8bad1; line-height: 1.6; }
+        label { display: block; margin: 16px 0 7px; }
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            border-radius: 7px;
+            border: 1px solid #33445c;
+            background: #0b1220;
+            color: white;
+        }
+        button {
+            width: 100%;
+            margin-top: 20px;
+            padding: 12px;
+            border: 0;
+            border-radius: 7px;
+            background: #36bdf5;
+            color: #07111c;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        #message { overflow-wrap: anywhere; }
+    </style>
+</head>
+<body>
+    <main class="accept-card">
+        <h1>Accept Organization Invitation</h1>
+        <p>Create your account to join the organization. Your assigned role will be applied when the invitation is accepted.</p>
+
+        <form id="acceptForm">
+            <label for="name">Full name</label>
+            <input id="name" name="name" autocomplete="name" required maxlength="100">
+
+            <label for="password">Create password</label>
+            <input id="password" name="password" type="password"
+                   autocomplete="new-password" required minlength="12">
+
+            <button id="submitButton" type="submit">Create account &amp; accept</button>
+        </form>
+
+        <p id="message" role="status" aria-live="polite"></p>
+    </main>
+
+    <script>
+        const token = new URLSearchParams(window.location.search).get("token");
+        const form = document.getElementById("acceptForm");
+        const message = document.getElementById("message");
+        const button = document.getElementById("submitButton");
+
+        if (!token) {
+            form.hidden = true;
+            message.textContent = "Invitation token is missing. Please open the original invitation link.";
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            if (!token) return;
+
+            button.disabled = true;
+            message.textContent = "Processing invitation...";
+
+            try {
+                const response = await fetch("/api/invitations/accept", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        token,
+                        name: document.getElementById("name").value.trim(),
+                        password: document.getElementById("password").value
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    if (response.status === 409) {
+                        message.textContent =
+                            "An account with this email already exists. Sign in to that account to accept the invitation.";
+                    } else {
+                        message.textContent =
+                            data.error || "Unable to accept invitation. The link may have expired or been used.";
+                    }
+                    button.disabled = false;
+                    return;
+                }
+
+                form.hidden = true;
+                message.textContent =
+                    "Account created and invitation accepted. You can now sign in.";
+            } catch {
+                message.textContent =
+                    "Could not contact the server. Please try again.";
+                button.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

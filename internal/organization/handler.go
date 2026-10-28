@@ -31,15 +31,19 @@ func (h *Handler) RegisterRoutes(
 	router *gin.Engine,
 	authHandler *auth.Handler,
 ) {
+	// All authenticated organization roles can read member information.
 	group := router.Group("/api/organization")
 	group.Use(authHandler.RequireAuth())
 	group.Use(auth.RequireRoles(
 		auth.RoleSuperAdmin,
 		auth.RoleManager,
+		auth.RoleAnalyst,
+		auth.RoleViewer,
 	))
 
 	group.GET("/members", h.ListMembers)
 
+	// Invitation management is restricted to Super Admin.
 	if h.invitationService != nil {
 		invitations := group.Group("/invitations")
 		invitations.Use(auth.RequireRoles(auth.RoleSuperAdmin))

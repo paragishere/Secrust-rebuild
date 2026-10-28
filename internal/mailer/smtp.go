@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/mail"
 	"net/smtp"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,10 @@ type SMTPConfig struct {
 	Username string
 	Password string
 	From     string
+
+	// AllowLocalHTTP permits HTTP invitation links only for localhost
+	// during local development. Keep this false in production.
+	AllowLocalHTTP bool
 }
 
 type Mailer struct {
@@ -26,6 +31,40 @@ type Mailer struct {
 
 func New(cfg SMTPConfig) *Mailer {
 	return &Mailer{config: cfg}
+}
+
+// validateInvitationURL requires HTTPS unless AllowLocalHTTP is enabled.
+// When enabled, only localhost and 127.0.0.1 may use HTTP.
+func validateInvitationURL(value string, allowLocalHTTP bool) error {
+	value = strings.TrimSpace(value)
+
+	u, err := url.Parse(value)
+	if err != nil ||
+		u == nil ||
+		u.Hostname() == "" ||
+		u.User != nil ||
+		u.Fragment != "" {
+		return errors.New("invalid invitation URL")
+	}
+
+	isHTTPS := strings.EqualFold(u.Scheme, "https")
+
+	isLocalHTTP := allowLocalHTTP &&
+		strings.EqualFold(u.Scheme, "http") &&
+		(strings.EqualFold(u.Hostname(), "localhost") ||
+			strings.EqualFold(u.Hostname(), "127.0.0.1"))
+
+	if !isHTTPS && !isLocalHTTP {
+		return errors.New(
+			"invitation URL must use HTTPS, except localhost HTTP in development",
+		)
+	}
+
+	if _, err := url.ParseRequestURI(value); err != nil {
+		return errors.New("invalid invitation URL")
+	}
+
+	return nil
 }
 
 // SendInvitation sends an invitation email over SMTP with mandatory STARTTLS.
@@ -74,8 +113,10 @@ func (m *Mailer) SendInvitation(
 		return errors.New("recipient must contain a single email address")
 	}
 
-	if !strings.HasPrefix(invitationURL, "https://") {
-		return errors.New("invitation URL must use HTTPS")
+	// Validate the invitation URL before attempting SMTP delivery.
+	// AllowLocalHTTP must be enabled explicitly by development configuration.
+	if err := validateInvitationURL(invitationURL, cfg.AllowLocalHTTP); err != nil {
+		return err
 	}
 
 	host := strings.TrimSuffix(cfg.Host, ".")
@@ -102,6 +143,7 @@ func (m *Mailer) SendInvitation(
 		return errors.New("SMTP server does not support STARTTLS")
 	}
 
+	// Enforce TLS 1.2 or newer for SMTP transport security.
 	tlsConfig := &tls.Config{
 		ServerName: host,
 		MinVersion: tls.VersionTLS12,
@@ -113,10 +155,12 @@ func (m *Mailer) SendInvitation(
 
 	auth := smtp.PlainAuth("", cfg.Username, cfg.Password, host)
 	if err := client.Auth(auth); err != nil {
-		return fmt.Errorf("SMTP authentication failed")
+		// Avoid exposing SMTP credentials or provider-specific auth details.
+		return errors.New("SMTP authentication failed")
 	}
 
 	subject := "You're invited to join Secrust"
+
 	body := fmt.Sprintf(
 		"Hello,\r\n\r\n"+
 			"You have been invited to join %s on Secrust.\r\n"+

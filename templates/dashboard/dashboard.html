@@ -4,488 +4,149 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{.CSRFToken}}">
     <title>Dashboard | Secrust</title>
-
-    <style>
-        :root {
-            color-scheme: dark;
-            --bg: #0b1120;
-            --panel: #111827;
-            --border: #273449;
-            --text: #e5e7eb;
-            --muted: #9ca3af;
-            --blue: #60a5fa;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            padding: 32px;
-            background: var(--bg);
-            color: var(--text);
-            font-family: Arial, sans-serif;
-        }
-
-        .container {
-            max-width: 1250px;
-            margin: auto;
-        }
-
-        .card {
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 24px;
-            margin: 20px 0;
-        }
-
-        h1, h2 {
-            color: var(--blue);
-        }
-
-        h1 {
-            margin-bottom: 8px;
-        }
-
-        h2 {
-            margin-top: 0;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-        }
-
-        input {
-            width: 100%;
-            padding: 12px;
-            background: var(--bg);
-            color: white;
-            border: 1px solid #374151;
-            border-radius: 6px;
-            margin-bottom: 12px;
-        }
-
-        button {
-            padding: 10px 16px;
-            background: #2563eb;
-            color: white;
-            border: 0;
-            border-radius: 6px;
-            cursor: pointer;
-            margin: 4px 4px 4px 0;
-        }
-
-        button:hover:not(:disabled) {
-            background: #1d4ed8;
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .secondary {
-            background: #374151;
-        }
-
-        .muted {
-            color: var(--muted);
-        }
-
-        .error {
-            color: #fca5a5;
-        }
-
-        .success {
-            color: #86efac;
-        }
-
-        #result, #websiteList {
-            margin-top: 16px;
-            overflow-wrap: anywhere;
-        }
-
-        .toolbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-
-        .toolbar p {
-            margin: 0;
-        }
-
-        .table-wrap {
-            width: 100%;
-            overflow-x: auto;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            white-space: nowrap;
-            font-size: 13px;
-        }
-
-        th, td {
-            padding: 13px 12px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-
-        th {
-            color: #93c5fd;
-            background: #172033;
-            font-weight: 600;
-        }
-
-        tbody tr:hover {
-            background: #172033;
-        }
-
-        tbody tr:last-child td {
-            border-bottom: none;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 5px;
-            font-size: 11px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        .severity-info {
-            color: #bfdbfe;
-            background: #1e3a5f;
-        }
-
-        .severity-low {
-            color: #bbf7d0;
-            background: #14532d;
-        }
-
-        .severity-medium {
-            color: #fde68a;
-            background: #713f12;
-        }
-
-        .severity-high {
-            color: #fed7aa;
-            background: #7c2d12;
-        }
-
-        .severity-critical {
-            color: #fecaca;
-            background: #7f1d1d;
-        }
-
-        .status-success {
-            color: #86efac;
-        }
-
-        .status-warning {
-            color: #fde68a;
-        }
-
-        .status-error {
-            color: #fca5a5;
-        }
-
-        .pagination {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-top: 16px;
-        }
-
-        .pagination p {
-            margin: 0;
-        }
-
-        .empty-state {
-            padding: 28px 12px;
-            text-align: center;
-            color: var(--muted);
-        }
-
-        .path-cell {
-            max-width: 280px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .filters {
-            display: grid;
-            grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(140px, 1fr));
-            gap: 14px;
-            margin: 20px 0;
-            align-items: end;
-        }
-
-        .filter-field label {
-            font-size: 13px;
-            color: #9ca3af;
-        }
-
-        .filter-field input,
-        .filter-field select {
-            width: 100%;
-            min-width: 0;
-            padding: 10px;
-            margin-bottom: 0;
-            background: #0b1120;
-            color: #e5e7eb;
-            border: 1px solid #374151;
-            border-radius: 6px;
-        }
-
-        .filter-actions {
-            grid-column: 1 / -1;
-        }
-
-        @media (max-width: 800px) {
-            .filters {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .search-field,
-            .filter-actions {
-                grid-column: 1 / -1;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .filters {
-                grid-template-columns: 1fr;
-            }
-
-            .search-field,
-            .filter-actions {
-                grid-column: auto;
-            }
-        }
-
-        @media (max-width: 640px) {
-            body {
-                padding: 14px;
-            }
-
-            .card {
-                padding: 16px;
-            }
-
-            h1 {
-                font-size: 24px;
-            }
-        }
-    
-        /* Alert Management */
-        .alert-toolbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin: 16px 0;
-        }
-
-        .alert-filters {
-            display: grid;
-            grid-template-columns: minmax(180px, 1fr) auto;
-            gap: 12px;
-            align-items: end;
-            margin: 16px 0;
-        }
-
-        .alert-filters select {
-            width: 100%;
-            padding: 10px;
-            background: var(--bg);
-            color: var(--text);
-            border: 1px solid #374151;
-            border-radius: 6px;
-        }
-
-        .alert-row { cursor: pointer; }
-
-        .alert-row:focus {
-            outline: 2px solid var(--blue);
-            outline-offset: -2px;
-        }
-
-        .alert-row.selected { background: #172033; }
-
-        .alert-status {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 5px;
-            font-size: 11px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        .alert-open { color: #fecaca; background: #7f1d1d; }
-        .alert-acknowledged { color: #fde68a; background: #713f12; }
-        .alert-resolved { color: #bbf7d0; background: #14532d; }
-
-        .alert-details-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
-            margin: 18px 0;
-        }
-
-        .alert-detail {
-            min-width: 0;
-            padding: 12px;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-        }
-
-        .alert-detail strong {
-            display: block;
-            margin-bottom: 6px;
-            color: var(--muted);
-            font-size: 12px;
-        }
-
-        .alert-detail span { overflow-wrap: anywhere; }
-
-        #alertDetails pre {
-            padding: 14px;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: auto;
-            white-space: pre-wrap;
-            overflow-wrap: anywhere;
-        }
-
-        .divider {
-            height: 1px;
-            background: var(--border);
-            margin: 24px 0;
-        }
-
-        [hidden] { display: none !important; }
-
-        @media (max-width: 600px) {
-            .alert-filters,
-            .alert-details-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-</style>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script src="/static/js/dashboard.js" defer></script>
 </head>
 
-<body>
+<body data-user-role="{{.Role}}">
 <div class="container">
-    <h1>Secrust Dashboard</h1>
-    <p class="muted">Authenticated user: {{.Name}}</p>
 
-    <form action="/logout" method="POST">
-        <input
-            type="hidden"
-            name="csrf_token"
-            value="{{.CSRFToken}}"
-        >
-        <button type="submit" class="secondary">Logout</button>
-    </form>
+    <header class="dashboard-header">
+        <div class="brand-block">
+            <a href="/dashboard" class="brand">
+                SECRUST<span>.</span>
+            </a>
+            <p class="eyebrow">SECURITY OPERATIONS</p>
+        </div>
 
-    <!-- Website registration -->
-    <section class="card">
-        <h2>Register Website</h2>
+        <nav class="header-actions" aria-label="Dashboard navigation">
+            <a href="/organization" class="nav-link" id="organizationLink">
+                <span aria-hidden="true">◈</span>
+                Organization
+                <span aria-hidden="true">→</span>
+            </a>
 
-        <p class="muted">
-            Register a domain to receive its ingestion API key.
-            The raw API key is shown only once.
-        </p>
+            <form action="/logout" method="POST" class="logout-form">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <button type="submit" class="secondary">Logout</button>
+                <a href="/organization" class="nav-link" id="organizationLink">
+    <span aria-hidden="true">◈</span>
+    Organization
+    <span aria-hidden="true">→</span>
+</a>
+            </form>
+        </nav>
+    </header>
 
-        <form id="websiteForm">
-            <label for="domain">Website domain</label>
-            <input
-                id="domain"
-                name="domain"
-                type="text"
-                placeholder="example.com"
-                maxlength="253"
-                autocomplete="url"
-                required
-            >
-
-            <button id="createButton" type="submit">
-                Create Website
-            </button>
-        </form>
-
-        <div id="result" role="status" aria-live="polite"></div>
-    </section>
-
-    <!-- Registered websites -->
-    <section class="card">
-        <div class="toolbar">
+    <main>
+        <section class="page-heading">
             <div>
-                <h2>Registered Websites</h2>
-                <p class="muted">Your organization's registered domains.</p>
+                <p class="eyebrow">SECURITY MONITORING PLATFORM</p>
+                <h1>Secrust <span>Dashboard</span></h1>
+                <p class="muted">
+                    Authenticated user: <strong>{{.Name}}</strong>
+                    <span class="role-badge">{{.Role}}</span>
+                </p>
+            </div>
+        </section>
+
+        <!-- Website registration -->
+        <section class="card" id="websiteRegistration"
+                 data-permission="website-create">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">ASSET MANAGEMENT</p>
+                    <h2>Register Website</h2>
+                    <p class="muted">
+                        Register a domain to receive its ingestion API key.
+                        The raw API key is shown only once.
+                    </p>
+                </div>
             </div>
 
-            <button id="refreshWebsites" type="button" class="secondary">
-                Refresh Websites
-            </button>
-        </div>
+            <form id="websiteForm">
+                <label for="domain">Website domain</label>
+                <div class="inline-form">
+                    <input id="domain" name="domain" type="text"
+                           placeholder="example.com" maxlength="253"
+                           autocomplete="url" required>
+                    <button id="createButton" type="submit">
+                        Create Website <span aria-hidden="true">→</span>
+                    </button>
+                </div>
+            </form>
 
-        <div id="websiteList" class="muted" aria-live="polite">
-            Loading websites...
-        </div>
-    </section>
+            <div id="result" role="status" aria-live="polite"></div>
+        </section>
 
+        <!-- Registered websites -->
+        <section class="card">
+            <div class="toolbar">
+                <div>
+                    <p class="eyebrow">MONITORED ASSETS</p>
+                    <h2>Registered Websites</h2>
+                    <p class="muted">
+                        Your organization's registered domains.
+                    </p>
+                </div>
 
-    <!-- Alert Management -->
-    <section class="card" id="alertManagement">
-        <div class="toolbar">
-            <div>
-                <h2>Security Alerts</h2>
-                <p class="muted">Review, investigate, acknowledge and resolve detections.</p>
+                <button id="refreshWebsites" type="button"
+                        class="secondary">
+                    ↻ Refresh Websites
+                </button>
             </div>
-            <button id="refreshAlerts" type="button">Refresh Alerts</button>
-        </div>
 
-        <div class="alert-filters">
-            <div class="filter-field">
-                <label for="alertStatusFilter">Alert status</label>
-                <select id="alertStatusFilter">
-                    <option value="">All statuses</option>
-                    <option value="open">Open</option>
-                    <option value="acknowledged">Acknowledged</option>
-                    <option value="resolved">Resolved</option>
-                </select>
+            <div id="websiteList" class="muted" aria-live="polite">
+                Loading websites...
             </div>
-            <div>
-                <button id="applyAlertFilters" type="button">Apply Filter</button>
-                <button id="clearAlertFilters" type="button" class="secondary">Clear</button>
+        </section>
+
+        <!-- Alert Management -->
+        <section class="card" id="alertManagement">
+            <div class="toolbar">
+                <div>
+                    <p class="eyebrow">THREAT DETECTION</p>
+                    <h2>Security Alerts</h2>
+                    <p class="muted">
+                        Review, investigate, acknowledge and resolve detections.
+                    </p>
+                </div>
+
+                <button id="refreshAlerts" type="button" class="secondary">
+                    ↻ Refresh Alerts
+                </button>
             </div>
-        </div>
 
-        <p id="alertsMessage" class="muted" role="status" aria-live="polite">Loading alerts...</p>
+            <div class="alert-filters">
+                <div class="filter-field">
+                    <label for="alertStatusFilter">Alert status</label>
+                    <select id="alertStatusFilter">
+                        <option value="">All statuses</option>
+                        <option value="open">Open</option>
+                        <option value="acknowledged">Acknowledged</option>
+                        <option value="resolved">Resolved</option>
+                    </select>
+                </div>
 
-        <div class="table-wrap">
-            <table>
-                <thead>
+                <div class="filter-actions">
+                    <button id="applyAlertFilters" type="button">
+                        Apply Filter
+                    </button>
+                    <button id="clearAlertFilters" type="button"
+                            class="secondary">
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            <p id="alertsMessage" class="muted"
+               role="status" aria-live="polite">Loading alerts...</p>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
                     <tr>
                         <th>Created (UTC)</th>
                         <th>Severity</th>
@@ -494,1005 +155,157 @@
                         <th>Status</th>
                         <th>Action</th>
                     </tr>
-                </thead>
-                <tbody id="alertsTableBody">
-                    <tr><td colspan="6" class="empty-state">Loading alerts...</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="pagination">
-            <p id="alertsPaginationInfo" class="muted">Page 1</p>
-            <div>
-                <button id="previousAlertsPage" type="button" class="secondary" disabled>Previous</button>
-                <button id="nextAlertsPage" type="button" disabled>Next</button>
+                    </thead>
+                    <tbody id="alertsTableBody">
+                    <tr>
+                        <td colspan="6" class="empty-state">Loading alerts...</td>
+                    </tr>
+                    </tbody>
+                </table>
             </div>
-        </div>
 
-        <section id="alertDetailsPanel" hidden>
-            <div class="divider"></div>
-            <div class="alert-toolbar">
+            <div class="pagination">
+                <p id="alertsPaginationInfo" class="muted">Page 1</p>
                 <div>
-                    <h2>Alert Details</h2>
-                    <p id="alertDetailsMessage" class="muted" role="status" aria-live="polite">Select an alert to investigate.</p>
+                    <button id="previousAlertsPage" type="button"
+                            class="secondary" disabled>Previous</button>
+                    <button id="nextAlertsPage" type="button" disabled>Next</button>
                 </div>
-                <button id="closeAlertDetails" type="button" class="secondary">Close Details</button>
             </div>
-            <div id="alertDetails"></div>
-            <div id="alertActions" hidden>
-                <button id="acknowledgeAlert" type="button">Acknowledge</button>
-                <button id="resolveAlert" type="button">Resolve</button>
+
+            <section id="alertDetailsPanel" hidden>
+                <div class="divider"></div>
+
+                <div class="alert-toolbar">
+                    <div>
+                        <h2>Alert Details</h2>
+                        <p id="alertDetailsMessage" class="muted"
+                           role="status" aria-live="polite">
+                            Select an alert to investigate.
+                        </p>
+                    </div>
+                    <button id="closeAlertDetails" type="button"
+                            class="secondary">Close Details</button>
+                </div>
+
+                <div id="alertDetails"></div>
+
+                <div id="alertActions" hidden>
+                    <button id="acknowledgeAlert" type="button">
+                        Acknowledge
+                    </button>
+                    <button id="resolveAlert" type="button">
+                        Resolve
+                    </button>
+                </div>
+            </section>
+        </section>
+
+        <!-- Logs Explorer -->
+        <section class="card">
+            <div class="toolbar">
+                <div>
+                    <p class="eyebrow">EVENT INVESTIGATION</p>
+                    <h2>Logs Explorer</h2>
+                    <p class="muted">
+                        Security and HTTP events for your organization.
+                    </p>
+                </div>
+
+                <button id="refreshLogs" type="button" class="secondary">
+                    ↻ Refresh Logs
+                </button>
+            </div>
+
+            <div class="filters">
+                <div class="filter-field search-field">
+                    <label for="logSearch">Search IP, path, event</label>
+                    <input id="logSearch" type="search" maxlength="200"
+                           placeholder="192.0.2.10 or /login">
+                </div>
+
+                <div class="filter-field">
+                    <label for="severityFilter">Severity</label>
+                    <select id="severityFilter">
+                        <option value="">All severities</option>
+                        <option value="info">Info</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="statusFilter">HTTP status</label>
+                    <select id="statusFilter">
+                        <option value="">All statuses</option>
+                        <option value="200">200</option>
+                        <option value="301">301</option>
+                        <option value="302">302</option>
+                        <option value="400">400</option>
+                        <option value="401">401</option>
+                        <option value="403">403</option>
+                        <option value="404">404</option>
+                        <option value="429">429</option>
+                        <option value="500">500</option>
+                        <option value="502">502</option>
+                        <option value="503">503</option>
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="eventTypeFilter">Event type</label>
+                    <input id="eventTypeFilter" type="text" maxlength="100"
+                           placeholder="authentication_failure">
+                </div>
+
+                <div class="filter-actions">
+                    <button id="applyFilters" type="button">Apply Filters</button>
+                    <button id="clearFilters" type="button"
+                            class="secondary">Clear</button>
+                </div>
+            </div>
+
+            <p id="logsMessage" class="muted"
+               role="status" aria-live="polite">Loading logs...</p>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Timestamp (UTC)</th>
+                        <th>Severity</th>
+                        <th>Event</th>
+                        <th>Method</th>
+                        <th>Path</th>
+                        <th>HTTP Status</th>
+                        <th>IP Address</th>
+                    </tr>
+                    </thead>
+                    <tbody id="logsTableBody">
+                    <tr>
+                        <td colspan="7" class="empty-state">Loading logs...</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                <p id="paginationInfo" class="muted">Page 1</p>
+                <div>
+                    <button id="previousPage" type="button"
+                            class="secondary" disabled>Previous</button>
+                    <button id="nextPage" type="button" disabled>Next</button>
+                </div>
             </div>
         </section>
-    </section>
+    </main>
 
-
-    <!-- Logs Explorer -->
-    <section class="card">
-        <div class="toolbar">
-            <div>
-                <h2>Logs Explorer</h2>
-                <p class="muted">
-                    Security and HTTP events for your organization.
-                </p>
-            </div>
-
-            <button id="refreshLogs" type="button">
-                Refresh Logs
-            </button>
-        </div>
-
-        <div class="filters">
-            <div class="filter-field search-field">
-                <label for="logSearch">Search IP, path, event</label>
-                <input id="logSearch" type="search" maxlength="200"
-                       placeholder="192.0.2.10 or /login">
-            </div>
-            <div class="filter-field">
-                <label for="severityFilter">Severity</label>
-                <select id="severityFilter">
-                    <option value="">All severities</option>
-                    <option value="info">Info</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                </select>
-            </div>
-            <div class="filter-field">
-                <label for="statusFilter">HTTP status</label>
-                <select id="statusFilter">
-                    <option value="">All statuses</option>
-                    <option value="200">200</option>
-                    <option value="301">301</option>
-                    <option value="302">302</option>
-                    <option value="400">400</option>
-                    <option value="401">401</option>
-                    <option value="403">403</option>
-                    <option value="404">404</option>
-                    <option value="429">429</option>
-                    <option value="500">500</option>
-                    <option value="502">502</option>
-                    <option value="503">503</option>
-                </select>
-            </div>
-            <div class="filter-field">
-                <label for="eventTypeFilter">Event type</label>
-                <input id="eventTypeFilter" type="text" maxlength="100"
-                       placeholder="authentication_failure">
-            </div>
-            <div class="filter-actions">
-                <button id="applyFilters" type="button">Apply Filters</button>
-                <button id="clearFilters" type="button" class="secondary">Clear</button>
-            </div>
-        </div>
-
-        <p id="logsMessage" class="muted" role="status" aria-live="polite">
-            Loading logs...
-        </p>
-
-        <div class="table-wrap">
-            <table>
-                <thead>
-                <tr>
-                    <th>Timestamp (UTC)</th>
-                    <th>Severity</th>
-                    <th>Event</th>
-                    <th>Method</th>
-                    <th>Path</th>
-                    <th>HTTP Status</th>
-                    <th>IP Address</th>
-                </tr>
-                </thead>
-
-                <tbody id="logsTableBody">
-                <tr>
-                    <td colspan="7" class="empty-state">
-                        Loading logs...
-                    </td>
-                </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="pagination">
-            <p id="paginationInfo" class="muted">
-                Page 1
-            </p>
-
-            <div>
-                <button
-                    id="previousPage"
-                    type="button"
-                    class="secondary"
-                    disabled
-                >
-                    Previous
-                </button>
-
-                <button
-                    id="nextPage"
-                    type="button"
-                    disabled
-                >
-                    Next
-                </button>
-            </div>
-        </div>
-    </section>
+    <footer class="dashboard-footer">
+        <span>SECRUST WEB SHIELD</span>
+        <span>Security Monitoring · Protected workspace</span>
+    </footer>
 </div>
-
-<script>
-"use strict";
-
-const result = document.getElementById("result");
-const websiteList = document.getElementById("websiteList");
-const createButton = document.getElementById("createButton");
-
-const logsTableBody = document.getElementById("logsTableBody");
-const logsMessage = document.getElementById("logsMessage");
-const paginationInfo = document.getElementById("paginationInfo");
-const previousPageButton = document.getElementById("previousPage");
-const nextPageButton = document.getElementById("nextPage");
-
-const PAGE_SIZE = 20;
-let currentOffset = 0;
-let logsLoading = false;
-
-function getCookie(name) {
-    const prefix = name + "=";
-    const cookie = document.cookie
-        .split("; ")
-        .find(item => item.startsWith(prefix));
-
-    if (!cookie) {
-        return "";
-    }
-
-    try {
-        return decodeURIComponent(cookie.substring(prefix.length));
-    } catch {
-        return "";
-    }
-}
-
-async function readJSON(response) {
-    const contentType = response.headers.get("content-type") || "";
-
-    if (!contentType.includes("application/json")) {
-        return {};
-    }
-
-    try {
-        return await response.json();
-    } catch {
-        return {};
-    }
-}
-
-function showMessage(message, isError = false) {
-    result.replaceChildren();
-
-    const paragraph = document.createElement("p");
-    paragraph.textContent = message;
-    paragraph.className = isError ? "error" : "success";
-
-    result.appendChild(paragraph);
-}
-
-function showAPIKey(domain, apiKey) {
-    result.replaceChildren();
-
-    const message = document.createElement("p");
-    message.textContent = "Website created: " + domain;
-    result.appendChild(message);
-
-    const warning = document.createElement("p");
-    warning.className = "muted";
-    warning.textContent =
-        "Copy this API key now and store it securely. It cannot be retrieved again.";
-    result.appendChild(warning);
-
-    const keyInput = document.createElement("input");
-    keyInput.type = "password";
-    keyInput.readOnly = true;
-    keyInput.autocomplete = "off";
-    keyInput.value = apiKey;
-    keyInput.setAttribute("aria-label", "Generated API key");
-    result.appendChild(keyInput);
-
-    const revealButton = document.createElement("button");
-    revealButton.type = "button";
-    revealButton.textContent = "Show key";
-
-    revealButton.addEventListener("click", () => {
-        const reveal = keyInput.type === "password";
-        keyInput.type = reveal ? "text" : "password";
-        revealButton.textContent = reveal ? "Hide key" : "Show key";
-    });
-
-    result.appendChild(revealButton);
-
-    const copyButton = document.createElement("button");
-    copyButton.type = "button";
-    copyButton.textContent = "Copy API key";
-
-    copyButton.addEventListener("click", async () => {
-        try {
-            await navigator.clipboard.writeText(apiKey);
-            copyButton.textContent = "Copied";
-        } catch {
-            keyInput.focus();
-            keyInput.select();
-            copyButton.textContent = "Select key and copy";
-        }
-    });
-
-    result.appendChild(copyButton);
-}
-
-document.getElementById("websiteForm").addEventListener(
-    "submit",
-    async event => {
-        event.preventDefault();
-
-        const domain = document.getElementById("domain").value.trim();
-        const csrfToken = getCookie("secrust_csrf");
-
-        if (!csrfToken) {
-            showMessage(
-                "CSRF token is missing. Refresh the dashboard and try again.",
-                true
-            );
-            return;
-        }
-
-        createButton.disabled = true;
-        showMessage("Creating website...");
-
-        try {
-            const response = await fetch("/api/websites", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRF-Token": csrfToken
-                },
-                credentials: "same-origin",
-                body: JSON.stringify({ domain })
-            });
-
-            const data = await readJSON(response);
-
-            if (response.redirected) {
-                showMessage("Your session may have expired. Log in again.", true);
-                return;
-            }
-
-            if (!response.ok) {
-                showMessage(
-                    data.error ||
-                    `Website creation failed (HTTP ${response.status}).`,
-                    true
-                );
-                return;
-            }
-
-            if (!data.website || !data.api_key) {
-                showMessage(
-                    "Website response was incomplete. Check the server logs.",
-                    true
-                );
-                return;
-            }
-
-            showAPIKey(data.website.domain, data.api_key);
-            document.getElementById("domain").value = "";
-
-            await loadWebsites();
-        } catch {
-            showMessage(
-                "Request failed. Check that the server is running.",
-                true
-            );
-        } finally {
-            createButton.disabled = false;
-        }
-    }
-);
-
-async function loadWebsites() {
-    websiteList.textContent = "Loading websites...";
-
-    try {
-        const response = await fetch("/api/websites", {
-            method: "GET",
-            credentials: "same-origin"
-        });
-
-        const data = await readJSON(response);
-
-        if (response.redirected) {
-            websiteList.textContent = "Your session may have expired. Log in again.";
-            return;
-        }
-
-        if (!response.ok) {
-            websiteList.textContent =
-                data.error ||
-                `Unable to load websites (HTTP ${response.status}).`;
-            return;
-        }
-
-        const websites = Array.isArray(data.websites)
-            ? data.websites
-            : [];
-
-        websiteList.replaceChildren();
-
-        if (websites.length === 0) {
-            websiteList.textContent = "No websites registered yet.";
-            return;
-        }
-
-        const list = document.createElement("ul");
-
-        for (const website of websites) {
-            const item = document.createElement("li");
-            const domain = website.domain || "Unknown domain";
-            const status = website.status || "unknown";
-
-            item.textContent = `${domain} — ${status}`;
-            list.appendChild(item);
-        }
-
-        websiteList.appendChild(list);
-    } catch {
-        websiteList.textContent =
-            "Unable to load websites. Check the server connection.";
-    }
-}
-
-function formatTimestamp(value) {
-    if (!value) {
-        return "—";
-    }
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-        return String(value);
-    }
-
-    return date.toISOString().replace("T", " ").replace("Z", " UTC");
-}
-
-function createCell(value, className = "") {
-    const cell = document.createElement("td");
-    cell.textContent =
-        value === null || value === undefined || value === ""
-            ? "—"
-            : String(value);
-
-    if (className) {
-        cell.className = className;
-    }
-
-    return cell;
-}
-
-function severityClass(value) {
-    const severity = String(value || "").toLowerCase();
-
-    switch (severity) {
-        case "info":
-        case "low":
-        case "medium":
-        case "high":
-        case "critical":
-            return "severity-" + severity;
-        default:
-            return "";
-    }
-}
-
-function statusClass(value) {
-    const status = Number(value);
-
-    if (status >= 200 && status < 300) {
-        return "status-success";
-    }
-
-    if (status >= 300 && status < 400) {
-        return "status-warning";
-    }
-
-    if (status >= 400 && status <= 599) {
-        return "status-error";
-    }
-
-    return "";
-}
-
-function renderLogs(logs) {
-    logsTableBody.replaceChildren();
-
-    if (logs.length === 0) {
-        const row = document.createElement("tr");
-        const cell = document.createElement("td");
-
-        cell.colSpan = 7;
-        cell.className = "empty-state";
-        cell.textContent = "No logs found for this page.";
-
-        row.appendChild(cell);
-        logsTableBody.appendChild(row);
-        return;
-    }
-
-    for (const log of logs) {
-        const row = document.createElement("tr");
-
-        row.appendChild(createCell(formatTimestamp(log.CreatedAt)));
-
-        const severityCell = document.createElement("td");
-        const severityBadge = document.createElement("span");
-
-        severityBadge.className =
-            "badge " + severityClass(log.Severity);
-
-        severityBadge.textContent = log.Severity || "unknown";
-        severityCell.appendChild(severityBadge);
-        row.appendChild(severityCell);
-
-        row.appendChild(createCell(log.EventType));
-        row.appendChild(createCell(log.Method));
-        row.appendChild(createCell(log.Path, "path-cell"));
-
-        const statusCell = createCell(
-            log.Status,
-            statusClass(log.Status)
-        );
-        row.appendChild(statusCell);
-
-        row.appendChild(createCell(log.IP));
-
-        logsTableBody.appendChild(row);
-    }
-}
-
-async function loadLogs() {
-    if (logsLoading) return;
-
-    logsLoading = true;
-    document.getElementById("refreshLogs").disabled = true;
-    document.getElementById("applyFilters").disabled = true;
-    previousPageButton.disabled = true;
-    nextPageButton.disabled = true;
-
-    logsMessage.textContent = "Loading logs...";
-    logsMessage.className = "muted";
-
-    const params = new URLSearchParams({
-        limit: String(PAGE_SIZE),
-        offset: String(currentOffset)
-    });
-
-    const search = document.getElementById("logSearch").value.trim();
-    const severity = document.getElementById("severityFilter").value;
-    const status = document.getElementById("statusFilter").value;
-    const eventType = document.getElementById("eventTypeFilter").value.trim();
-
-    if (search) params.set("search", search);
-    if (severity) params.set("severity", severity);
-    if (status) params.set("status", status);
-    if (eventType) params.set("event_type", eventType);
-
-    try {
-        const response = await fetch(`/api/logs?${params.toString()}`, {
-            method: "GET",
-            credentials: "same-origin",
-            headers: { "Accept": "application/json" }
-        });
-        const data = await readJSON(response);
-
-        if (response.redirected) {
-            logsMessage.textContent = "Your session may have expired. Log in again.";
-            logsMessage.className = "error";
-            renderLogs([]);
-            return;
-        }
-
-        if (!response.ok) {
-            logsMessage.textContent =
-                data.error || `Unable to load logs (HTTP ${response.status}).`;
-            logsMessage.className = "error";
-            renderLogs([]);
-            return;
-        }
-
-        if (!Array.isArray(data.logs)) {
-            logsMessage.textContent = "Unexpected response from logs API.";
-            logsMessage.className = "error";
-            renderLogs([]);
-            return;
-        }
-
-        renderLogs(data.logs);
-        logsMessage.textContent = data.logs.length
-            ? `Loaded ${data.logs.length} log(s).`
-            : "No logs match the selected filters.";
-        logsMessage.className = data.logs.length ? "success" : "muted";
-
-        const pageNumber = Math.floor(currentOffset / PAGE_SIZE) + 1;
-        paginationInfo.textContent = `Page ${pageNumber}`;
-        previousPageButton.disabled = currentOffset === 0;
-        nextPageButton.disabled = data.logs.length < PAGE_SIZE;
-    } catch {
-        logsMessage.textContent =
-            "Unable to connect to the logs API. Check the server.";
-        logsMessage.className = "error";
-        renderLogs([]);
-    } finally {
-        logsLoading = false;
-        document.getElementById("refreshLogs").disabled = false;
-        document.getElementById("applyFilters").disabled = false;
-    }
-}
-
-document.getElementById("applyFilters").addEventListener("click", () => {
-    currentOffset = 0;
-    loadLogs();
-});
-
-document.getElementById("clearFilters").addEventListener("click", () => {
-    document.getElementById("logSearch").value = "";
-    document.getElementById("severityFilter").value = "";
-    document.getElementById("statusFilter").value = "";
-    document.getElementById("eventTypeFilter").value = "";
-    currentOffset = 0;
-    loadLogs();
-});
-
-document.getElementById("logSearch").addEventListener("keydown", event => {
-    if (event.key === "Enter") {
-        event.preventDefault();
-        currentOffset = 0;
-        loadLogs();
-    }
-});
-
-document.getElementById("eventTypeFilter").addEventListener("keydown", event => {
-    if (event.key === "Enter") {
-        event.preventDefault();
-        currentOffset = 0;
-        loadLogs();
-    }
-});
-
-document.getElementById("refreshWebsites").addEventListener(
-    "click",
-    loadWebsites
-);
-
-document.getElementById("refreshLogs").addEventListener(
-    "click",
-    loadLogs
-);
-
-previousPageButton.addEventListener("click", () => {
-    if (currentOffset >= PAGE_SIZE) {
-        currentOffset -= PAGE_SIZE;
-        loadLogs();
-    }
-});
-
-nextPageButton.addEventListener("click", () => {
-    currentOffset += PAGE_SIZE;
-    loadLogs();
-});
-
-
-// Alert Management
-const alertsTableBody = document.getElementById("alertsTableBody");
-const alertsMessage = document.getElementById("alertsMessage");
-const alertsPaginationInfo = document.getElementById("alertsPaginationInfo");
-const previousAlertsPage = document.getElementById("previousAlertsPage");
-const nextAlertsPage = document.getElementById("nextAlertsPage");
-
-const ALERT_PAGE_SIZE = 20;
-let alertOffset = 0;
-let alertsLoading = false;
-let selectedAlertID = "";
-let selectedAlertStatus = "";
-
-function normalizeAlert(raw) {
-    if (!raw || typeof raw !== "object") return null;
-
-    // Supports snake_case JSON tags and Go's default exported field names.
-    const pick = (...keys) => {
-        for (const key of keys) {
-            if (raw[key] !== undefined) return raw[key];
-        }
-        return undefined;
-    };
-
-    return {
-        id: pick("id", "ID"),
-        organization_id: pick("organization_id", "OrganizationID"),
-        website_id: pick("website_id", "WebsiteID"),
-        severity: pick("severity", "Severity"),
-        type: pick("type", "Type"),
-        message: pick("message", "Message"),
-        ip: pick("ip", "IP"),
-        status: pick("status", "Status"),
-        rule_key: pick("rule_key", "RuleKey"),
-        details: pick("details", "Details"),
-        created_at: pick("created_at", "CreatedAt"),
-        acknowledged_by: pick("acknowledged_by", "AcknowledgedBy"),
-        acknowledged_at: pick("acknowledged_at", "AcknowledgedAt"),
-        resolved_by: pick("resolved_by", "ResolvedBy"),
-        resolved_at: pick("resolved_at", "ResolvedAt")
-    };
-}
-
-function alertStatusClass(status) {
-    const value = String(status || "").toLowerCase();
-    return ["open", "acknowledged", "resolved"].includes(value)
-        ? "alert-status alert-" + value
-        : "alert-status";
-}
-
-function addAlertDetail(parent, label, value) {
-    const wrapper = document.createElement("div");
-    wrapper.className = "alert-detail";
-
-    const heading = document.createElement("strong");
-    heading.textContent = label;
-
-    const content = document.createElement("span");
-    content.textContent = value === null || value === undefined || value === ""
-        ? "—"
-        : String(value);
-
-    wrapper.append(heading, content);
-    parent.appendChild(wrapper);
-}
-
-function renderAlertDetails(alert) {
-    const container = document.getElementById("alertDetails");
-    const panel = document.getElementById("alertDetailsPanel");
-    const actions = document.getElementById("alertActions");
-
-    container.replaceChildren();
-    panel.hidden = false;
-
-    const grid = document.createElement("div");
-    grid.className = "alert-details-grid";
-
-    addAlertDetail(grid, "Alert ID", alert.id);
-    addAlertDetail(grid, "Organization", alert.organization_id);
-    addAlertDetail(grid, "Website ID", alert.website_id);
-    addAlertDetail(grid, "Severity", alert.severity);
-    addAlertDetail(grid, "Type", alert.type);
-    addAlertDetail(grid, "Rule Key", alert.rule_key);
-    addAlertDetail(grid, "Source IP", alert.ip);
-    addAlertDetail(grid, "Status", alert.status);
-    addAlertDetail(grid, "Created (UTC)", formatTimestamp(alert.created_at));
-    addAlertDetail(grid, "Acknowledged By", alert.acknowledged_by);
-    addAlertDetail(grid, "Acknowledged At (UTC)", formatTimestamp(alert.acknowledged_at));
-    addAlertDetail(grid, "Resolved By", alert.resolved_by);
-    addAlertDetail(grid, "Resolved At (UTC)", formatTimestamp(alert.resolved_at));
-    container.appendChild(grid);
-
-    const messageHeading = document.createElement("h3");
-    messageHeading.textContent = "Alert Message";
-    container.appendChild(messageHeading);
-
-    const message = document.createElement("p");
-    message.textContent = alert.message || "No message available.";
-    container.appendChild(message);
-
-    const detailsHeading = document.createElement("h3");
-    detailsHeading.textContent = "Detection Details";
-    container.appendChild(detailsHeading);
-
-    const details = document.createElement("pre");
-    details.textContent = JSON.stringify(alert.details || {}, null, 2);
-    container.appendChild(details);
-
-    document.getElementById("alertDetailsMessage").textContent =
-        "Viewing alert " + (alert.id || "");
-
-    selectedAlertID = alert.id || "";
-    selectedAlertStatus = String(alert.status || "").toLowerCase();
-
-    // The server remains authoritative for authorization.
-    actions.hidden = !["open", "acknowledged"].includes(selectedAlertStatus);
-    document.getElementById("acknowledgeAlert").hidden = selectedAlertStatus !== "open";
-    document.getElementById("resolveAlert").hidden =
-        !["open", "acknowledged"].includes(selectedAlertStatus);
-}
-
-async function openAlertDetails(alertID) {
-    const panel = document.getElementById("alertDetailsPanel");
-    const container = document.getElementById("alertDetails");
-    const message = document.getElementById("alertDetailsMessage");
-
-    panel.hidden = false;
-    container.replaceChildren();
-    message.textContent = "Loading alert details...";
-
-    try {
-        const response = await fetch("/api/alerts/" + encodeURIComponent(alertID), {
-            method: "GET",
-            credentials: "same-origin",
-            headers: { "Accept": "application/json" }
-        });
-        const data = await readJSON(response);
-
-        if (response.redirected) {
-            message.textContent = "Your session may have expired. Log in again.";
-            return;
-        }
-        if (!response.ok) {
-            message.textContent = data.error || `Unable to load alert (HTTP ${response.status}).`;
-            return;
-        }
-        if (!data || typeof data !== "object" || !data.id) {
-            message.textContent = "Unexpected response from alert API.";
-            return;
-        }
-        renderAlertDetails(data);
-    } catch {
-        message.textContent = "Unable to connect to the alert API.";
-    }
-}
-
-function renderAlerts(alerts) {
-    alertsTableBody.replaceChildren();
-
-    if (alerts.length === 0) {
-        const row = document.createElement("tr");
-        const cell = document.createElement("td");
-        cell.colSpan = 6;
-        cell.className = "empty-state";
-        cell.textContent = "No alerts found.";
-        row.appendChild(cell);
-        alertsTableBody.appendChild(row);
-        return;
-    }
-
-    for (const alert of alerts) {
-        const row = document.createElement("tr");
-        row.className = "alert-row";
-        row.tabIndex = 0;
-        row.setAttribute("role", "button");
-        row.setAttribute("aria-label", "View alert: " + (alert.message || alert.id || "Security alert"));
-
-        if (String(alert.id) === String(selectedAlertID)) row.classList.add("selected");
-
-        row.appendChild(createCell(formatTimestamp(alert.created_at)));
-
-        const severityCell = document.createElement("td");
-        const severityBadge = document.createElement("span");
-        severityBadge.className = "badge " + severityClass(alert.severity);
-        severityBadge.textContent = alert.severity || "unknown";
-        severityCell.appendChild(severityBadge);
-        row.appendChild(severityCell);
-
-        row.appendChild(createCell(alert.message || alert.type));
-        row.appendChild(createCell(alert.ip));
-
-        const statusCell = document.createElement("td");
-        const statusBadge = document.createElement("span");
-        statusBadge.className = alertStatusClass(alert.status);
-        statusBadge.textContent = alert.status || "unknown";
-        statusCell.appendChild(statusBadge);
-        row.appendChild(statusCell);
-
-        const actionCell = document.createElement("td");
-        const viewButton = document.createElement("button");
-        viewButton.type = "button";
-        viewButton.textContent = "View Details";
-        viewButton.addEventListener("click", event => {
-            event.stopPropagation();
-            openAlertDetails(alert.id);
-        });
-        actionCell.appendChild(viewButton);
-        row.appendChild(actionCell);
-
-        row.addEventListener("click", () => openAlertDetails(alert.id));
-        row.addEventListener("keydown", event => {
-            if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                openAlertDetails(alert.id);
-            }
-        });
-        alertsTableBody.appendChild(row);
-    }
-}
-
-async function loadAlerts() {
-    if (alertsLoading) return;
-
-    alertsLoading = true;
-    document.getElementById("refreshAlerts").disabled = true;
-    document.getElementById("applyAlertFilters").disabled = true;
-    previousAlertsPage.disabled = true;
-    nextAlertsPage.disabled = true;
-    alertsMessage.textContent = "Loading alerts...";
-    alertsMessage.className = "muted";
-
-    const params = new URLSearchParams({
-        limit: String(ALERT_PAGE_SIZE),
-        offset: String(alertOffset)
-    });
-    const status = document.getElementById("alertStatusFilter").value;
-    if (status) params.set("status", status);
-
-    try {
-        const response = await fetch("/api/alerts?" + params.toString(), {
-            method: "GET",
-            credentials: "same-origin",
-            headers: { "Accept": "application/json" }
-        });
-        const data = await readJSON(response);
-
-        if (response.redirected) {
-            alertsMessage.textContent = "Your session may have expired. Log in again.";
-            alertsMessage.className = "error";
-            renderAlerts([]);
-            return;
-        }
-        if (!response.ok) {
-            alertsMessage.textContent = data.error || `Unable to load alerts (HTTP ${response.status}).`;
-            alertsMessage.className = "error";
-            renderAlerts([]);
-            return;
-        }
-        const rawAlerts = Array.isArray(data.alerts) ? data.alerts
-            : Array.isArray(data.Alerts) ? data.Alerts
-            : Array.isArray(data.data) ? data.data
-            : null;
-
-        if (!rawAlerts) {
-            alertsMessage.textContent = "Unexpected response from alerts API.";
-            alertsMessage.className = "error";
-            renderAlerts([]);
-            return;
-        }
-
-        const alerts = rawAlerts.map(normalizeAlert).filter(alert => alert && alert.id);
-        renderAlerts(alerts);
-        alertsMessage.textContent = alerts.length
-            ? `Loaded ${alerts.length} alert(s).`
-            : "No alerts match the selected filters.";
-        alertsMessage.className = alerts.length ? "success" : "muted";
-
-        const pageNumber = Math.floor(alertOffset / ALERT_PAGE_SIZE) + 1;
-        alertsPaginationInfo.textContent = "Page " + pageNumber;
-        previousAlertsPage.disabled = alertOffset === 0;
-        nextAlertsPage.disabled = alerts.length < ALERT_PAGE_SIZE;
-    } catch {
-        alertsMessage.textContent = "Unable to connect to the alerts API.";
-        alertsMessage.className = "error";
-        renderAlerts([]);
-    } finally {
-        alertsLoading = false;
-        document.getElementById("refreshAlerts").disabled = false;
-        document.getElementById("applyAlertFilters").disabled = false;
-    }
-}
-
-async function updateAlertStatus(action) {
-    if (!selectedAlertID) return;
-
-    const csrfToken = getCookie("secrust_csrf");
-    if (!csrfToken) {
-        document.getElementById("alertDetailsMessage").textContent =
-            "CSRF token is missing. Refresh the dashboard and try again.";
-        return;
-    }
-
-    const acknowledgeButton = document.getElementById("acknowledgeAlert");
-    const resolveButton = document.getElementById("resolveAlert");
-    acknowledgeButton.disabled = true;
-    resolveButton.disabled = true;
-
-    const alertID = selectedAlertID;
-
-    try {
-        const response = await fetch(
-            "/api/alerts/" + encodeURIComponent(alertID) + "/" + action,
-            {
-                method: "PATCH",
-                credentials: "same-origin",
-                headers: {
-                    "Accept": "application/json",
-                    "X-CSRF-Token": csrfToken
-                }
-            }
-        );
-        const data = await readJSON(response);
-
-        if (response.redirected) {
-            document.getElementById("alertDetailsMessage").textContent =
-                "Your session may have expired. Log in again.";
-            return;
-        }
-        if (!response.ok) {
-            document.getElementById("alertDetailsMessage").textContent =
-                data.error || `Action failed (HTTP ${response.status}).`;
-            return;
-        }
-
-        document.getElementById("alertDetailsMessage").textContent =
-            action === "acknowledge" ? "Alert acknowledged." : "Alert resolved.";
-        await loadAlerts();
-        await openAlertDetails(alertID);
-    } catch {
-        document.getElementById("alertDetailsMessage").textContent =
-            "Unable to update alert status.";
-    } finally {
-        acknowledgeButton.disabled = false;
-        resolveButton.disabled = false;
-    }
-}
-
-document.getElementById("refreshAlerts").addEventListener("click", loadAlerts);
-document.getElementById("applyAlertFilters").addEventListener("click", () => {
-    alertOffset = 0;
-    loadAlerts();
-});
-document.getElementById("clearAlertFilters").addEventListener("click", () => {
-    document.getElementById("alertStatusFilter").value = "";
-    alertOffset = 0;
-    loadAlerts();
-});
-previousAlertsPage.addEventListener("click", () => {
-    if (alertOffset >= ALERT_PAGE_SIZE) {
-        alertOffset -= ALERT_PAGE_SIZE;
-        loadAlerts();
-    }
-});
-nextAlertsPage.addEventListener("click", () => {
-    alertOffset += ALERT_PAGE_SIZE;
-    loadAlerts();
-});
-document.getElementById("acknowledgeAlert").addEventListener("click", () => {
-    updateAlertStatus("acknowledge");
-});
-document.getElementById("resolveAlert").addEventListener("click", () => {
-    updateAlertStatus("resolve");
-});
-document.getElementById("closeAlertDetails").addEventListener("click", () => {
-    document.getElementById("alertDetailsPanel").hidden = true;
-});
-
-
-loadWebsites();
-loadLogs();
-loadAlerts();
-</script>
 </body>
 </html>

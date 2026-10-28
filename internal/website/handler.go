@@ -19,13 +19,26 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) RegisterRoutes(router *gin.Engine, authHandler *auth.Handler) {
 	group := router.Group("/api/websites")
 	group.Use(authHandler.RequireAuth())
-	group.Use(auth.RequireRoles(
-		auth.RoleSuperAdmin,
-		auth.RoleManager,
-	))
 
-	group.GET("", h.List)
-	group.POST("", authHandler.RequireCSRFHeader(), h.Create)
+	// Organization members can view websites.
+	group.GET(
+		"",
+		auth.RequireRoles(
+			auth.RoleSuperAdmin,
+			auth.RoleManager,
+			auth.RoleAnalyst,
+			auth.RoleViewer,
+		),
+		h.List,
+	)
+
+	// Only privileged roles can register websites.
+	group.POST(
+		"",
+		auth.RequireRoles(auth.RoleSuperAdmin, auth.RoleManager),
+		authHandler.RequireCSRFHeader(),
+		h.Create,
+	)
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -40,7 +53,9 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"websites": websites})
+	c.JSON(http.StatusOK, gin.H{
+		"websites": websites,
+	})
 }
 
 func (h *Handler) Create(c *gin.Context) {
@@ -48,7 +63,11 @@ func (h *Handler) Create(c *gin.Context) {
 		Domain string `json:"domain"`
 	}
 
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16*1024)
+	c.Request.Body = http.MaxBytesReader(
+		c.Writer,
+		c.Request.Body,
+		16*1024,
+	)
 
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

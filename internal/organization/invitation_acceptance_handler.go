@@ -33,8 +33,25 @@ func (h *InvitationAcceptanceHandler) RegisterRoutes(
 	router *gin.Engine,
 	authHandler *auth.Handler,
 ) {
+	// Email link opens this page in the browser.
+	router.GET("/invitations/accept", func(c *gin.Context) {
+		token := strings.TrimSpace(c.Query("token"))
+		if token == "" {
+			c.HTML(http.StatusBadRequest, "accept_invitation.html", gin.H{
+				"InvalidLink": true,
+			})
+			return
+		}
+
+		c.HTML(http.StatusOK, "accept_invitation.html", gin.H{
+			"InvalidLink": false,
+		})
+	})
+
+	// API used by the acceptance page.
 	router.POST("/api/invitations/accept", h.AcceptNew)
 
+	// Existing signed-in account accepts the invitation.
 	router.POST(
 		"/api/organization/invitations/accept-existing",
 		authHandler.RequireAuth(),

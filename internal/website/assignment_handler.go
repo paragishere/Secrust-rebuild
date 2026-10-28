@@ -97,7 +97,7 @@ func (h *AssignmentHandler) Unassign(c *gin.Context) {
 		"message": "website access removed",
 	})
 
-	c.JSON(http.StatusOK, gin.H{"message": "website access removed"})
+	// c.JSON(http.StatusOK, gin.H{"message": "website access removed"})
 }
 
 // Keep the JSON decoder import used for strict request parsing in future changes.

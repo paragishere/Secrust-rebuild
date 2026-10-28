@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 
 	"github.com/paragishere/secrust/internal/alerts"
 	"github.com/paragishere/secrust/internal/audit"
@@ -18,6 +20,7 @@ import (
 	"github.com/paragishere/secrust/internal/config"
 	"github.com/paragishere/secrust/internal/database"
 	"github.com/paragishere/secrust/internal/ingest"
+	"github.com/paragishere/secrust/internal/mailer"
 	"github.com/paragishere/secrust/internal/organization"
 	"github.com/paragishere/secrust/internal/setup"
 	"github.com/paragishere/secrust/internal/website"
@@ -33,6 +36,9 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
+	if err := godotenv.Load(); err != nil {
+		log.Printf("No .env file loaded; using existing environment variables")
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -78,6 +84,7 @@ func run(logger *slog.Logger) error {
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
 	router.LoadHTMLGlob("templates/**/*.html")
+	router.Static("/static", "./static")
 
 	authRepo := auth.NewRepository(db)
 	authService := auth.NewService(authRepo, 8*time.Hour)
@@ -183,8 +190,32 @@ func run(logger *slog.Logger) error {
 
 	organizationRepo := organization.NewRepository(db)
 	organizationService := organization.NewService(organizationRepo)
-	organizationHandler := organization.NewHandler(organizationService)
+
+	invitationRepo := organization.NewInvitationRepository(db)
+	invitationMailer := mailer.New(mailer.SMTPConfig{
+		Host:     cfg.SMTPHost,
+		Port:     cfg.SMTPPort,
+		Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword,
+		From:     cfg.SMTPFrom,
+	})
+
+	invitationService := organization.NewInvitationService(
+		invitationRepo,
+		invitationMailer,
+		cfg.AppBaseURL,
+		72*time.Hour,
+	)
+
+	organizationHandler := organization.NewHandlerWithInvitations(
+		organizationService,
+		invitationService,
+	)
 	organizationHandler.RegisterRoutes(router, authHandler)
+	acceptanceHandler := organization.NewInvitationAcceptanceHandler(
+		invitationService,
+	)
+	acceptanceHandler.RegisterRoutes(router, authHandler)
 
 	// Website assignment with atomic audit logging.
 	assignmentRepo := website.NewAssignmentRepository(db)

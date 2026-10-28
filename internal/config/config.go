@@ -20,6 +20,12 @@ type Config struct {
 	DetectionMinAuthFailures  int
 	DetectionMinNotFound      int
 	DetectionMinRequestsPerIP int
+	SMTPHost                  string
+	SMTPPort                  string
+	SMTPUsername              string
+	SMTPPassword              string
+	SMTPFrom                  string
+	AppBaseURL                string
 }
 
 func Load() (Config, error) {
@@ -28,6 +34,12 @@ func Load() (Config, error) {
 		DatabasePath:  getEnv("DATABASE_PATH", "./data/secrust.db"),
 		SessionSecret: strings.TrimSpace(os.Getenv("SESSION_SECRET")),
 		Environment:   getEnv("ENVIRONMENT", "development"),
+		SMTPHost:      getEnv("SMTP_HOST", ""),
+		SMTPPort:      getEnv("SMTP_PORT", "587"),
+		SMTPUsername:  strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
+		SMTPPassword:  os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:      strings.TrimSpace(os.Getenv("SMTP_FROM")),
+		AppBaseURL:    strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/"),
 	}
 
 	port, err := strconv.Atoi(cfg.Port)

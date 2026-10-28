@@ -18,6 +18,7 @@ import (
 	"github.com/paragishere/secrust/internal/auth"
 	"github.com/paragishere/secrust/internal/config"
 	"github.com/paragishere/secrust/internal/database"
+	"github.com/paragishere/secrust/internal/endpoint"
 	"github.com/paragishere/secrust/internal/ingest"
 	"github.com/paragishere/secrust/internal/mailer"
 	"github.com/paragishere/secrust/internal/organization"
@@ -141,6 +142,40 @@ func run(logger *slog.Logger) error {
 	ingestRoutes := router.Group("/api")
 	ingestRoutes.Use(ingest.APIKeyAuth(ingestRepo))
 	ingestRoutes.POST("/logs", ingestHandler.Ingest)
+
+	endpointRepo := endpoint.NewRepository(db)
+	endpointHandler := endpoint.NewHandler(endpointRepo)
+
+	// Registration requires an authenticated organization administrator.
+	endpointRegistrationRoutes := router.Group("/api/endpoints")
+	endpointRegistrationRoutes.Use(authHandler.RequireAuth())
+	endpointRegistrationRoutes.Use(auth.RequireRoles(
+		auth.RoleSuperAdmin,
+		auth.RoleManager,
+	))
+	endpointRegistrationRoutes.POST(
+		"",
+		authHandler.RequireCSRFHeader(),
+		endpointHandler.RegisterHost,
+	)
+
+	// Dashboard APIs: session-authenticated and organization-scoped.
+	endpointReadRoutes := router.Group("/api/endpoints")
+	endpointReadRoutes.Use(authHandler.RequireAuth())
+
+	endpointReadRoutes.GET("", endpointHandler.ListHosts)
+	endpointReadRoutes.GET("/:hostID/events", endpointHandler.ListHostEvents)
+
+	// Agent routes use per-host credentials, not website API keys.
+	endpointAgentRoutes := router.Group("/api/endpoint")
+	endpointAgentRoutes.Use(endpoint.AgentKeyAuth(endpointRepo))
+	endpointAgentRoutes.POST("/events", endpointHandler.IngestEvents)
+	endpointAgentRoutes.POST("/heartbeat", endpointHandler.Heartbeat)
+	endpointRegistrationRoutes.POST(
+		"/:hostID/rotate-key",
+		authHandler.RequireCSRFHeader(),
+		endpointHandler.RotateHostKey,
+	)
 
 	alertHandler := alerts.NewHandler(alertRepo)
 	alertRoutes := router.Group("/api/alerts")

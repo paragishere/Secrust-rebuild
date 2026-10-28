@@ -1005,9 +1005,283 @@ document.addEventListener("DOMContentLoaded", () => {
         if (panel) panel.hidden = true;
     });
 
+    /* ---------------- Endpoint Monitoring ---------------- */
+
+    const endpointTableBody = $("endpointsTableBody");
+    const endpointEventsBody = $("endpointEventsTableBody");
+    const ENDPOINT_EVENT_PAGE_SIZE = 50;
+
+    let endpointHosts = [];
+    let selectedEndpointID = "";
+    let endpointEventOffset = 0;
+    let endpointEventTotal = 0;
+    let endpointHostsLoading = false;
+    let endpointEventsLoading = false;
+
+    function endpointIsOnline(host) {
+        if (!host.last_heartbeat) return false;
+
+        const heartbeat = new Date(host.last_heartbeat).getTime();
+        if (!Number.isFinite(heartbeat)) return false;
+
+        const age = Date.now() - heartbeat;
+        return age >= -30000 && age <= 120000;
+    }
+
+    function endpointEmptyRow(body, colspan, message) {
+        if (!body) return;
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = colspan;
+        cell.className = "empty-state";
+        cell.textContent = message;
+        row.appendChild(cell);
+        body.replaceChildren(row);
+    }
+
+    async function loadEndpoints() {
+        if (endpointHostsLoading || !endpointTableBody) return;
+
+        endpointHostsLoading = true;
+        setDisabled($("refreshEndpoints"), true);
+        setMessage($("endpointMessage"), "Loading endpoints...");
+
+        try {
+            const response = await fetch("/api/endpoints", {
+                method: "GET",
+                credentials: "same-origin",
+                headers: { "Accept": "application/json" }
+            });
+
+            const data = await readJSON(response);
+
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP ${response.status}`);
+            }
+
+            endpointHosts = Array.isArray(data.hosts) ? data.hosts : [];
+            renderEndpointHosts();
+            setMessage(
+                $("endpointMessage"),
+                `${endpointHosts.length} endpoint(s) loaded.`
+            );
+        } catch (error) {
+            console.error("Load endpoints error:", error);
+            setMessage(
+                $("endpointMessage"),
+                "Unable to load endpoints. Check your session and try again.",
+                "status-error"
+            );
+            endpointEmptyRow(endpointTableBody, 6, "Endpoint inventory unavailable.");
+        } finally {
+            endpointHostsLoading = false;
+            setDisabled($("refreshEndpoints"), false);
+        }
+    }
+
+    function renderEndpointHosts() {
+        if (!endpointTableBody) return;
+
+        let online = 0;
+        endpointTableBody.replaceChildren();
+
+        if (endpointHosts.length === 0) {
+            endpointEmptyRow(endpointTableBody, 6, "No endpoints registered yet.");
+        }
+
+        for (const host of endpointHosts) {
+            const isOnline = endpointIsOnline(host);
+            if (isOnline) online++;
+
+            const row = document.createElement("tr");
+            row.appendChild(createCell(host.hostname));
+            row.appendChild(createCell(String(host.os_type || "").toUpperCase()));
+            row.appendChild(createCell(host.agent_version));
+
+            const statusCell = createCell(isOnline ? "Online" : "Offline");
+            statusCell.className = isOnline ? "status-success" : "status-warning";
+            row.appendChild(statusCell);
+            row.appendChild(createCell(formatTimestamp(host.last_heartbeat)));
+
+            const actionCell = document.createElement("td");
+            const selectButton = document.createElement("button");
+            selectButton.type = "button";
+            selectButton.className = "secondary";
+            selectButton.textContent =
+                selectedEndpointID === host.id ? "Selected" : "View Events";
+            selectButton.setAttribute(
+                "aria-pressed",
+                String(selectedEndpointID === host.id)
+            );
+            selectButton.addEventListener("click", () => {
+                selectedEndpointID = host.id;
+                endpointEventOffset = 0;
+                renderEndpointHosts();
+                loadEndpointEvents();
+            });
+
+            actionCell.appendChild(selectButton);
+            row.appendChild(actionCell);
+            endpointTableBody.appendChild(row);
+        }
+
+        if ($("endpointTotal")) $("endpointTotal").textContent = endpointHosts.length;
+        if ($("endpointOnline")) $("endpointOnline").textContent = online;
+        if ($("endpointOffline")) {
+            $("endpointOffline").textContent = endpointHosts.length - online;
+        }
+    }
+
+    async function loadEndpointEvents() {
+        if (endpointEventsLoading || !selectedEndpointID || !endpointEventsBody) {
+            return;
+        }
+
+        endpointEventsLoading = true;
+        setDisabled($("refreshEndpointEvents"), true);
+        setDisabled($("applyEndpointFilters"), true);
+        setMessage($("endpointEventsMessage"), "Loading endpoint events...");
+
+        const host = endpointHosts.find((item) => item.id === selectedEndpointID);
+        if ($("selectedEndpointLabel")) {
+            $("selectedEndpointLabel").textContent = host
+                ? `${host.hostname} · ${host.os_type}`
+                : "Selected endpoint";
+        }
+
+        try {
+            const params = new URLSearchParams({
+                limit: String(ENDPOINT_EVENT_PAGE_SIZE),
+                offset: String(endpointEventOffset)
+            });
+
+            const response = await fetch(
+                `/api/endpoints/${encodeURIComponent(selectedEndpointID)}/events?${params}`,
+                {
+                    method: "GET",
+                    credentials: "same-origin",
+                    headers: { "Accept": "application/json" }
+                }
+            );
+
+            const data = await readJSON(response);
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP ${response.status}`);
+            }
+
+            const events = Array.isArray(data.events) ? data.events : [];
+            endpointEventTotal = Number(data.total ?? data.count ?? events.length);
+            renderEndpointEvents(events);
+
+            setMessage(
+                $("endpointEventsMessage"),
+                `${events.length} event(s) on this page.`
+            );
+
+            const pageInfo = $("endpointEventsPaginationInfo");
+            if (pageInfo) {
+                pageInfo.textContent = endpointEventTotal === 0
+                    ? "No events"
+                    : `Showing ${endpointEventOffset + 1}–${endpointEventOffset + events.length}`;
+            }
+
+            setDisabled(
+                $("previousEndpointEventsPage"),
+                endpointEventOffset === 0
+            );
+            setDisabled(
+                $("nextEndpointEventsPage"),
+                events.length < ENDPOINT_EVENT_PAGE_SIZE
+            );
+        } catch (error) {
+            console.error("Load endpoint events error:", error);
+            setMessage(
+                $("endpointEventsMessage"),
+                "Unable to load events for this endpoint.",
+                "status-error"
+            );
+            endpointEmptyRow(endpointEventsBody, 7, "Endpoint events unavailable.");
+        } finally {
+            endpointEventsLoading = false;
+            setDisabled($("refreshEndpointEvents"), !selectedEndpointID);
+            setDisabled($("applyEndpointFilters"), !selectedEndpointID);
+            setDisabled($("clearEndpointFilters"), !selectedEndpointID);
+        }
+    }
+
+    function renderEndpointEvents(events) {
+        if (!endpointEventsBody) return;
+
+        const severity = String($("endpointSeverityFilter")?.value || "")
+            .toLowerCase();
+
+        const filtered = events.filter((event) =>
+            !severity || String(event.severity || "").toLowerCase() === severity
+        );
+
+        endpointEventsBody.replaceChildren();
+
+        if (filtered.length === 0) {
+            endpointEmptyRow(
+                endpointEventsBody,
+                7,
+                severity ? "No events match this severity on the current page."
+                        : "No events recorded for this endpoint."
+            );
+            return;
+        }
+
+        for (const event of filtered) {
+            const row = document.createElement("tr");
+            row.appendChild(createCell(formatTimestamp(event.occurred_at)));
+            row.appendChild(createCell(event.event_id));
+            row.appendChild(createCell(event.event_type));
+
+            const severityCell = createCell(event.severity);
+            severityCell.className = `severity-${String(event.severity || "").toLowerCase()}`;
+            row.appendChild(severityCell);
+
+            row.appendChild(createCell(event.risk_score));
+            row.appendChild(createCell(event.account));
+            row.appendChild(createCell(event.source_ip));
+            endpointEventsBody.appendChild(row);
+        }
+    }
+
+    $("refreshEndpoints")?.addEventListener("click", loadEndpoints);
+    $("refreshEndpointEvents")?.addEventListener("click", loadEndpointEvents);
+
+    $("applyEndpointFilters")?.addEventListener("click", () => {
+        endpointEventOffset = 0;
+        loadEndpointEvents();
+    });
+
+    $("clearEndpointFilters")?.addEventListener("click", () => {
+        if ($("endpointSeverityFilter")) {
+            $("endpointSeverityFilter").value = "";
+        }
+        endpointEventOffset = 0;
+        loadEndpointEvents();
+    });
+
+    $("previousEndpointEventsPage")?.addEventListener("click", () => {
+        if (endpointEventOffset >= ENDPOINT_EVENT_PAGE_SIZE) {
+            endpointEventOffset -= ENDPOINT_EVENT_PAGE_SIZE;
+            loadEndpointEvents();
+        }
+    });
+
+    $("nextEndpointEventsPage")?.addEventListener("click", () => {
+        if (endpointEventOffset + ENDPOINT_EVENT_PAGE_SIZE < endpointEventTotal) {
+            endpointEventOffset += ENDPOINT_EVENT_PAGE_SIZE;
+            loadEndpointEvents();
+        }
+    });
+
     /* ---------------- Initial dashboard load ---------------- */
 
     loadWebsites();
     loadLogs();
     loadAlerts();
+    loadEndpoints();
 });

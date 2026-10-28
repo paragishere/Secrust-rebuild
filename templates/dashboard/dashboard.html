@@ -200,7 +200,132 @@
                 </div>
             </section>
         </section>
+<!-- Endpoint Monitoring -->
+<section class="card" id="endpointMonitoring">
+    <div class="toolbar">
+        <div>
+            <p class="eyebrow">ENDPOINT SECURITY</p>
+            <h2>Endpoint Monitoring</h2>
+            <p class="muted">
+                Monitor registered Windows and Linux agents and inspect endpoint security events.
+            </p>
+        </div>
+        <button id="refreshEndpoints" type="button" class="secondary">
+            ↻ Refresh Endpoints
+        </button>
+    </div>
 
+    <div class="endpoint-summary">
+        <div class="endpoint-stat">
+            <span class="muted">Total Endpoints</span>
+            <strong id="endpointTotal">—</strong>
+        </div>
+        <div class="endpoint-stat">
+            <span class="muted">Online</span>
+            <strong id="endpointOnline">—</strong>
+        </div>
+        <div class="endpoint-stat">
+            <span class="muted">Offline</span>
+            <strong id="endpointOffline">—</strong>
+        </div>
+    </div>
+
+    <p id="endpointMessage" class="muted" role="status" aria-live="polite">
+        Loading endpoints...
+    </p>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Hostname</th>
+                    <th>OS</th>
+                    <th>Agent Version</th>
+                    <th>Status</th>
+                    <th>Last Heartbeat (UTC)</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="endpointsTableBody">
+                <tr>
+                    <td colspan="6" class="empty-state">Loading endpoints...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="toolbar">
+        <div>
+            <h3>Endpoint Security Events</h3>
+            <p class="muted" id="selectedEndpointLabel">
+                Select an endpoint to inspect its events.
+            </p>
+        </div>
+        <button id="refreshEndpointEvents" type="button" class="secondary" disabled>
+            ↻ Refresh Events
+        </button>
+    </div>
+
+    <div class="filters endpoint-filters">
+        <div class="filter-field">
+            <label for="endpointSeverityFilter">Severity</label>
+            <select id="endpointSeverityFilter">
+                <option value="">All severities</option>
+                <option value="info">Info</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+            </select>
+        </div>
+        <div class="filter-field filter-actions">
+            <button id="applyEndpointFilters" type="button" disabled>
+                Apply Filter
+            </button>
+            <button id="clearEndpointFilters" type="button" class="secondary" disabled>
+                Clear
+            </button>
+        </div>
+    </div>
+
+    <p id="endpointEventsMessage" class="muted" role="status" aria-live="polite">
+        Select an endpoint to load events.
+    </p>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Occurred At (UTC)</th>
+                    <th>Event ID</th>
+                    <th>Event Type</th>
+                    <th>Severity</th>
+                    <th>Risk Score</th>
+                    <th>Account</th>
+                    <th>Source IP</th>
+                </tr>
+            </thead>
+            <tbody id="endpointEventsTableBody">
+                <tr>
+                    <td colspan="7" class="empty-state">
+                        Select an endpoint to load events.
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <p id="endpointEventsPaginationInfo" class="muted">No endpoint selected</p>
+        <div>
+            <button id="previousEndpointEventsPage" type="button"
+                    class="secondary" disabled>Previous</button>
+            <button id="nextEndpointEventsPage" type="button" disabled>Next</button>
+        </div>
+    </div>
+</section>
         <!-- Logs Explorer -->
         <section class="card">
             <div class="toolbar">

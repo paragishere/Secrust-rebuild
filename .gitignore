@@ -22,3 +22,6 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Local agent credentials
+secrust-agent-key.txt

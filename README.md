@@ -428,9 +428,7 @@ Contributions are welcome.
 4. Ensure secrets and generated binaries are excluded.
 5. Submit a Pull Request with a clear description.
 
-## License
 
-Add the project's chosen license before public distribution.
 
 ## Maintainer
 

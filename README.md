@@ -120,15 +120,20 @@ The Windows agent and Secrust backend are maintained as separate codebases.
 
 ## Repositories
 
+| Component | Repository |
+|---|---|
+| Secrust backend | https://github.com/paragishere/secrust-rebuild |
+| Windows SystemMonitor agent | https://github.com/paragishere/SystemMonitor |
+
 ### Secrust Backend
 
 GitHub: https://github.com/paragishere/secrust-rebuild
 
 ### Windows SystemMonitor Agent
 
-GitHub: `ADD_SYSTEMMONITOR_GITHUB_URL`
+GitHub: https://github.com/paragishere/SystemMonitor
 
-The agent is a separate repository. Clone it independently when deploying or developing the Windows component.
+The agent is maintained separately from the backend. Clone it independently when developing or deploying the Windows component.
 
 ## Backend Installation
 
@@ -172,11 +177,13 @@ For production, configure a strong `SESSION_SECRET` of at least 32 characters. K
 go run ./cmd/server
 ```
 
-The development server is expected at:
+For local development, the server is expected at:
 
 ```text
 http://localhost:8080
 ```
+
+Set the agent's `server_url` to the reachable Secrust server address. `localhost` works only when the agent and backend run on the same machine; for a different Windows endpoint, use the backend machine's reachable LAN address or deployed HTTPS URL.
 
 Health check:
 
@@ -198,11 +205,11 @@ The SystemMonitor agent is a separate Go application.
 
 ### Clone the agent repository
 
-Replace the placeholder with the confirmed repository URL:
+Clone the confirmed Windows agent repository:
 
-```bash
-git clone ADD_SYSTEMMONITOR_GITHUB_URL
-cd SystemMonitor/agent
+```powershell
+git clone https://github.com/paragishere/SystemMonitor.git
+cd SystemMonitor\agent
 ```
 
 ### Build the agent
@@ -212,25 +219,41 @@ go mod download
 go build -o system-agent.exe .
 ```
 
-Run the agent using the execution mode supported by the current build:
+Run the agent using the execution mode supported by the current build. For a local foreground demonstration, start with:
 
 ```powershell
 .\system-agent.exe
 ```
 
-If running in service mode is supported:
+If the build supports service mode, it can also be launched with:
 
 ```powershell
 .\system-agent.exe service
 ```
 
+For an installed Windows service, use an elevated PowerShell window:
+
+```powershell
+Get-Service SystemMonitorAgent
+Start-Service SystemMonitorAgent
+Get-Service SystemMonitorAgent
+```
+
+To stop it:
+
+```powershell
+Stop-Service SystemMonitorAgent
+```
+
 ### Agent configuration
 
-The installed agent uses:
+The installed Windows service reads its configuration from:
 
 ```text
 C:\ProgramData\SystemMonitor\config.json
 ```
+
+The Windows service is named `SystemMonitorAgent`.
 
 Configuration structure:
 
@@ -322,7 +345,7 @@ Secrust supports endpoint credential rotation through an authenticated administr
 POST /api/endpoints/:hostID/rotate-key
 ```
 
-The route is restricted to authorized organization administrators/managers and requires the CSRF header.
+The route is restricted to authorized organization administrators/managers and requires the CSRF header. The raw replacement key is returned only once; securely update the Windows agent configuration after rotation.
 
 Rotation workflow:
 
